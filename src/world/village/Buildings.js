@@ -16,6 +16,15 @@ const _v = new Vector3();
 const _h = new Vector3();
 const WARM = new Color( 1.0, 0.68, 0.38 );
 
+// Render and collide against the same sloping roof sheet, including its eaves.
+// Using the builder's world transform keeps every rotated village house aligned.
+function solidRoof( B, colliders, key, points, thickness, options ) {
+
+	B.slab( key, points, thickness, options );
+	if ( colliders ) colliders.addSurface( points.map( p => B.toWorld( p.x, p.y, p.z ) ), thickness ).tag = 'roof';
+
+}
+
 function frameFns( terrain, x, z, yaw ) {
 
 	const cy = Math.cos( yaw ), sy = Math.sin( yaw );
@@ -384,7 +393,7 @@ export function buildHouse( ctx, s ) {
 	const roofKey = isThatch ? 'thatch' : 'roofMetal';
 	const roofTint = isThatch ? [ 1, 1, 1 ] : ( s.roofColor || lin( 0xa5452f ) );
 	const roofData = () => ( isThatch ? [ rand.next(), s.thatchAge ?? 0.4, 0, 0 ] : [ rand.next(), s.rust ?? 0.4, s.galv ? 1 : 0, 0 ] );
-	const roofSlab = ( pts, uDir ) => B.slab( roofKey, pts, T, { uDir: uDir.normalize(), up: UP, tint: roofTint, data: roofData() } );
+	const roofSlab = ( pts, uDir ) => solidRoof( B, colliders, roofKey, pts, T, { uDir: uDir.normalize(), up: UP, tint: roofTint, data: roofData() } );
 	const Tv = T / Math.cos( a );
 	let roofTop = yE;
 	let ridge = null;

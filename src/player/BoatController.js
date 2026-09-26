@@ -1,5 +1,6 @@
 import * as THREE from '../engine/index.js';
 import { WORLD } from '../world/WorldLayout.js';
+import { VehicleDockCollision } from './VehicleDockCollision.js';
 
 const RHO = 1025; // sea water density
 const GRAV = 9.81;
@@ -55,6 +56,8 @@ export class BoatController {
 		this.query = query;
 		this.terrain = terrain;
 		this.colliders = colliders;
+		this.dockCollision = colliders ? new VehicleDockCollision( model, colliders ) : null;
+		this.previousPosition = new THREE.Vector3();
 
 		const hydro = model.hydro || {};
 		this.mass = hydro.suggestedMass || 3200;
@@ -254,6 +257,7 @@ export class BoatController {
 
 	step( h ) {
 
+		this.previousPosition.copy( this.position );
 		const m = this.mass;
 		const F = _F.set( 0, - m * GRAV, 0 );
 		const T = _T.set( 0, 0, 0 ); // torque about COM (world)
@@ -425,6 +429,7 @@ export class BoatController {
 
 		// origin = com - R * comLocal
 		this.position.copy( comW ).sub( _v.copy( this.com ).applyQuaternion( this.quaternion ) );
+		this.dockCollision?.resolve( this, this.previousPosition );
 
 	}
 
@@ -499,8 +504,10 @@ export class BoatController {
 
 		}
 
-		// pier piles: keep the hull outline out of vertical cylinders / solid boxes near the waterline
-		if ( this.colliders ) {
+		// The newer hull sweep resolves fixed dock contacts after integration. Keep this
+		// legacy force response only as a fallback; running both made the small jet ski
+		// fight an oversized boat outline and stick to pier geometry.
+		if ( this.colliders && ! this.dockCollision ) {
 
 			const outline = this.outline || ( this.outline = [
 				new THREE.Vector3( 0, 0.3, 4.1 ), new THREE.Vector3( 1.2, 0.3, 2.0 ), new THREE.Vector3( - 1.2, 0.3, 2.0 ),

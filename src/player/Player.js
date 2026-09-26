@@ -1,5 +1,6 @@
 import * as THREE from '../engine/index.js';
 import { WORLD } from '../world/WorldLayout.js';
+import { resolveSolidMotion } from '../world/SolidCollision.js';
 import { HOUSE } from '../world/boat/Wheelhouse.js';
 import { HELI } from '../world/HeliModel.js';
 
@@ -9,6 +10,7 @@ const EYE = 1.62;
 const SWIM_EYE = EYE * 0.1; // eyes above the body's float point while swimming
 const RADIUS = 0.3;
 const HEIGHT = 1.75;
+const STEP_HEIGHT = 0.4;
 // water depth (mean level over the feet) where you start swimming / find your feet again
 const SWIM_DEPTH = 1.35;
 const STAND_DEPTH = 1.1;
@@ -69,6 +71,7 @@ export class Player {
 		this.camOff = 0;
 		this.camOffV = 0;
 		this._camY = null;
+		this.stepOffset = 0;
 		this.floating = true; // swimming at the surface (riding the waves) vs. free under water
 		this.slot = query.allocate( 'player', 1 );
 		this.prompt = null;
@@ -127,6 +130,21 @@ export class Player {
 		if ( c > g ) g = c;
 		if ( this.reef && this.reef.floorHeightAt ) g = Math.max( g, this.reef.floorHeightAt( x, z ) );
 		return g;
+
+	}
+
+	resolveMovement( previous, radius, height, margin = 0 ) {
+
+		// Keep compatibility with lightweight test collision stubs while all real game
+		// movement uses swept convex solids.
+		if ( ! this.colliders.characterSolids ) {
+
+			this.colliders.resolveCapsule( this.position, radius, height, margin );
+			return false;
+
+		}
+		return resolveSolidMotion( this.colliders.characterSolids( previous, this.position, radius, height, margin ),
+			previous, this.position, radius, height, this.velocity );
 
 	}
 
@@ -245,6 +263,7 @@ export class Player {
 			// something else drove the camera since our last frame (free camera, boat): start fresh
 			this.camOff = 0;
 			this.camOffV = 0;
+			this.stepOffset = 0;
 
 		} else if ( this.mode !== prevMode ) {
 
@@ -256,6 +275,26 @@ export class Player {
 		this.camOff = ( this.camOff + j ) * e;
 		this.camOffV = ( this.camOffV - w * j ) * e;
 		eye.y += this.camOff;
+		// The body still follows each tread exactly for reliable collision, while the
+		// viewpoint eases over its small vertical changes. This makes boardwalk seams
+		// and pier stairs feel continuous rather than like a series of camera jolts.
+		if ( this.mode !== 'walk' ) this.stepOffset = 0;
+		else this.stepOffset *= Math.exp( - 14 * dt );
+		this.stepOffset = THREE.MathUtils.clamp( this.stepOffset, - STEP_HEIGHT, STEP_HEIGHT );
+		if ( this.stepOffset > 1e-4 && this.colliders.characterSolids ) {
+
+			// When smoothing a downward step, verify the raised eye still clears any
+			// overhang before retaining that offset.
+			const from = eye.clone(); from.y -= 0.05;
+			const to = from.clone(); to.y += this.stepOffset;
+			resolveSolidMotion( this.colliders.characterSolids( from, to, 0.05, 0.1 ), from, to, 0.05, 0.1 );
+			this.stepOffset = Math.max( 0, to.y - from.y );
+			// A sloped collision response can make a tiny horizontal adjustment as well.
+			eye.x = to.x;
+			eye.z = to.z;
+
+		}
+		eye.y += this.stepOffset;
 		this.camera.position.copy( eye );
 		this._camY = this.camera.position.y;
 		this.camera.quaternion.setFromEuler( _e.set( this.pitch, this.yaw, 0 ) );
@@ -297,20 +336,67 @@ export class Player {
 
 		const p = this.position;
 		const old = p.clone();
+		const canStep = this.grounded && this.velocity.y <= 0;
 		p.addScaledVector( this.velocity, dt );
-		this.colliders.resolveCapsule( p, RADIUS, HEIGHT, 0.4 );
-		const g = this.groundAt( p.x, p.z, p.y + 0.45 );
-		if ( p.y <= g ) {
+		// Always start the solid sweep on the terrain surface. Without this, the
+		// lowest stair at the fish-sign entrance can be treated as a tall wall when
+		// a sloping sand sample leaves the feet fractionally below its neighbouring tread.
+		const terrainY = Math.max( this.terrain.heightAt( p.x, p.z ), this.reef?.floorHeightAt?.( p.x, p.z ) ?? - Infinity );
+		p.y = Math.max( p.y, terrainY );
+		const desired = p.clone(), incoming = this.velocity.clone();
+		const solids = this.colliders.characterSolids ? this.colliders.characterSolids( old, desired, RADIUS, HEIGHT, STEP_HEIGHT ) : null;
+		this.grounded = solids ? resolveSolidMotion( solids, old, p, RADIUS, HEIGHT, this.velocity ) : this.resolveMovement( old, RADIUS, HEIGHT, STEP_HEIGHT );
 
-			p.y = g;
-			if ( this.velocity.y < 0 ) this.velocity.y = 0;
-			this.grounded = true;
+		if ( canStep && solids ) {
 
-		} else {
+			const dx = desired.x - old.x, dz = desired.z - old.z;
+			const moved = ( p.x - old.x ) * dx + ( p.z - old.z ) * dz;
+			const wanted = dx * dx + dz * dz;
+			if ( wanted > 1e-7 && moved < wanted - 1e-7 ) {
 
-			this.grounded = p.y - g < 0.06;
+				// A complete up/across/down sweep avoids stepping through low roofs and
+				// only accepts a supported landing that makes more forward progress.
+				const up = old.clone(); up.y += STEP_HEIGHT;
+				resolveSolidMotion( solids, old, up, RADIUS, HEIGHT );
+				const across = up.clone().add( new THREE.Vector3( dx, 0, dz ) );
+				const stepVelocity = incoming.clone();
+				resolveSolidMotion( solids, up, across, RADIUS, HEIGHT, stepVelocity );
+				const down = across.clone(); down.y = old.y - STEP_HEIGHT;
+				const landed = resolveSolidMotion( solids, across, down, RADIUS, HEIGHT, stepVelocity );
+				const stepProgress = ( down.x - old.x ) * dx + ( down.z - old.z ) * dz;
+				if ( landed && down.y > old.y + 1e-3 && down.y <= old.y + STEP_HEIGHT + 1e-3 && stepProgress > moved + 1e-7 ) {
+
+					p.copy( down );
+					this.velocity.copy( stepVelocity );
+					this.grounded = true;
+
+				}
+
+			}
+
+			// Keep support over boardwalk seams and the short treads. This only runs for
+			// a grounded walker, never a jump, so it cannot pull the player down mid-air.
+			const down = p.clone(); down.y -= STEP_HEIGHT;
+			if ( resolveSolidMotion( solids, p, down, RADIUS, HEIGHT ) ) {
+
+				p.copy( down );
+				this.grounded = true;
+
+			} else {
+
+				const floor = this.groundAt( p.x, p.z, p.y );
+				if ( p.y - floor <= STEP_HEIGHT ) { p.y = floor; this.grounded = true; }
+
+			}
 
 		}
+
+		// Re-query after a slide because the corrected point may be on different terrain.
+		const g = this.groundAt( p.x, p.z, p.y + 1e-4 );
+		if ( p.y <= g + 1e-4 ) { p.y = g; this.grounded = true; }
+		else if ( ! this.grounded ) this.grounded = p.y - g < 0.06;
+		if ( this.grounded && this.velocity.y < 0 ) this.velocity.y = 0;
+		if ( canStep && this.grounded ) this.stepOffset += old.y - p.y;
 
 		// head bob + footsteps
 		const moved = Math.hypot( p.x - old.x, p.z - old.z );
@@ -397,9 +483,10 @@ export class Player {
 
 		}
 
+		const old = p.clone();
 		p.addScaledVector( this.velocity, dt );
 		p.y = Math.min( p.y, surfaceY + 0.05 );
-		this.colliders.resolveCapsule( p, RADIUS, 1.0, 0 );
+		this.resolveMovement( old, RADIUS, 1.0 );
 		const g = this.groundAt( p.x, p.z, p.y + 0.3 );
 		if ( p.y < g + 0.25 ) p.y = g + 0.25;
 
