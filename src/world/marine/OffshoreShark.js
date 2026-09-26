@@ -56,7 +56,7 @@ export class OffshoreShark {
 
 	nextEncounterDelay() {
 
-		return 120 + Math.random() * 120;
+		return 60 + Math.random() * 120;
 
 	}
 
@@ -69,8 +69,8 @@ export class OffshoreShark {
 		else _forward.normalize();
 		_right.set( _forward.z, 0, - _forward.x );
 
-		// Start 30 metres ahead, then deliberately approach to five metres before escaping.
-		_start.copy( camera.position ).addScaledVector( _forward, 30 );
+		// Start 25 metres out, approach directly, then make a close angled pass beside the player.
+		_start.copy( camera.position ).addScaledVector( _forward, 25 );
 		if ( _start.z < minZ ) _start.addScaledVector( _forward, ( minZ - _start.z ) / Math.max( _forward.z, 0.25 ) );
 		for ( let attempt = 0; attempt < 12 && this.terrain.heightAt( _start.x, _start.z ) > - 2.5; attempt ++ ) {
 
@@ -78,11 +78,12 @@ export class OffshoreShark {
 			_start.z = minZ + Math.random() * 35;
 
 		}
-		_near.copy( camera.position ).addScaledVector( _forward, 5 );
+		_near.copy( camera.position ).addScaledVector( _forward, 7 );
 		_near.z = Math.max( _near.z, minZ );
-		// The approaching shark's right is the camera's left. Take that turn while continuing
-		// out to sea, so the escape is clearly rightward and safely away from the player.
-		_end.copy( _near ).addScaledVector( _forward, 55 + Math.random() * 25 ).addScaledVector( _right, - ( 25 + Math.random() * 15 ) );
+		// At seven metres, turn 45° to the right and cross beside the player while continuing
+		// out to sea. Equal forward/right travel keeps the exit on that exact angled heading.
+		const exitDistance = 55 + Math.random() * 25;
+		_end.copy( _near ).addScaledVector( _forward, exitDistance ).addScaledVector( _right, exitDistance );
 		_end.z = Math.max( _end.z, minZ );
 
 		this.group.position.copy( _start );
