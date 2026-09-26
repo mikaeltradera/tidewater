@@ -150,6 +150,17 @@ export class GameState {
 
 	}
 
+	credit( amount ) {
+
+		const total = Math.max( 0, amount | 0 );
+		if ( ! total ) return 0;
+		this.money += total;
+		this.save();
+		this.emit();
+		return total;
+
+	}
+
 	sellCrabs() {
 
 		const count = this.crabs;
@@ -243,6 +254,9 @@ export class GameState {
 		this.drinks = Array.isArray( d.drinks ) ? d.drinks.filter( ( drink ) => drink && typeof drink.key === 'string' ) : [];
 		this.crabs = Math.max( 0, d.crabs | 0 );
 		this.crabTraps = normalizeCrabTraps( d.crabTraps );
+		// Crab catches now live in the physical traps until Joe buys them. Discard the old
+		// transient "basket" count left by the earlier haul implementation.
+		this.crabs = 0;
 		for ( const [ k, v ] of Object.entries( this.log ) ) if ( FISH[ k ] && v && v.bestKg > 0 && ! Number.isFinite( v.bestCm ) ) v.bestCm = Math.round( fishLengthCm( k, v.bestKg ) );
 		this.upgrades = { ...defaultUpgrades(), ...( d.upgrades || {} ) };
 		this.fuel = Number.isFinite( d.fuel ) ? d.fuel : null;

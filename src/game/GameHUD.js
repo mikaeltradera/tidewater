@@ -463,12 +463,13 @@ export class GameHUD {
 		const logged = Object.entries( s.log ).filter( ( [ k ] ) => FISH[ k ] ).map( ( [ k, v ] ) => `${ FISH[ k ].name }: ${ v.count } caught, best ${ v.bestKg.toFixed( 2 ) } kg · ${ v.bestCm ?? Math.round( fishLengthCm( k, v.bestKg ) ) } cm` ).join( '<br>' );
 		const carried = s.crabTraps.filter( ( trap ) => trap.state === 'carried' ).length;
 		const deployed = s.crabTraps.filter( ( trap ) => trap.state === 'placed' ).length;
+		const carriedCrabs = this.game.crabTraps.carriedCrabs;
 		this.inv.innerHTML = `
 			<h2>${ s.upgrades.hold > 0 ? 'Fish hold' : 'Cooler' }</h2>
 			<p class="gm-sub">${ s.inventory.length } fish · ${ s.holdKg.toFixed( 1 ) } of ${ s.stats.holdKg } kg · worth $${ s.holdValue }</p>
 			<div class="gm-list">${ rows || '<div class="gm-empty">Nothing yet. Cast from the pier, the beach or the boat.</div>' }</div>
 			${ logged ? `<div class="gm-log"><b>Fish log</b><br>${ logged }</div>` : '' }
-			<div class="gm-log"><b>Crab traps</b><br>${ carried } of ${ CRAB_TRAP_CARRY_LIMIT } carried · ${ deployed } deployed · ${ s.crabs } crab${ s.crabs === 1 ? '' : 's' } ready for Joe${ s.crabs ? ` · worth $${ s.crabs * CRAB_VALUE }` : '' }</div>
+			<div class="gm-log"><b>Crab traps</b><br>${ carried } of ${ CRAB_TRAP_CARRY_LIMIT } carried · ${ deployed } deployed${ carriedCrabs ? ` · ${ carriedCrabs } crab${ carriedCrabs === 1 ? '' : 's' } inside carried traps · worth $${ carriedCrabs * CRAB_VALUE }` : '' }</div>
 			${ fishingGuide( s.upgrades ) }
 			<div class="gm-foot"><span class="gm-sub">${ pad ? 'D-pad select · A confirm · B / X close' : 'Sell at the fish stand by the pier' }</span><button class="gm-btn is-ghost" data-close>Close (${ pad ? 'B / X' : 'I' })</button></div>`;
 		this.inv.querySelector( '[data-close]' ).onclick = () => this.toggleInventory( false );
@@ -504,18 +505,25 @@ export class GameHUD {
 		const v = this.vendor || { name: 'Fish buyer' };
 		const pad = this.game.app.input.gamepadConnected;
 		const rows = s.inventory.map( ( f ) => `<div class="gm-row has-cm"><span>${ FISH[ f.species ].name }</span><span class="gm-cm">${ f.cm ?? Math.round( fishLengthCm( f.species, f.kg ) ) } cm</span><span class="gm-kg">${ f.kg.toFixed( 2 ) } kg</span><span class="gm-val">$${ f.value }</span><button class="gm-mini" data-sell="${ f.id }">Sell${ pad ? ' (A)' : '' }</button></div>` ).join( '' );
-		const crabRow = s.crabs ? `<div class="gm-row"><span>Rock crab <small>${ s.crabs } trapped</small></span><span class="gm-val">$${ s.crabs * CRAB_VALUE }</span><button class="gm-mini" data-sell-crabs>Sell${ pad ? ' (A)' : '' }</button></div>` : '';
-		const total = s.holdValue + s.crabs * CRAB_VALUE;
+		const trappedCrabs = this.game.crabTraps.carriedCrabs;
+		const deadCrabs = this.game.crabTraps.carriedDeadCrabs;
+		const crabCount = trappedCrabs;
+		const crabSource = `${ trappedCrabs } in carried trap${ trappedCrabs === 1 ? '' : 's' }`;
+		const crabRow = crabCount ? `<div class="gm-row"><span>Rock crab <small>${ crabSource }</small></span><span class="gm-val">$${ crabCount * CRAB_VALUE }</span><button class="gm-mini" data-sell-crabs>Sell${ pad ? ' (A)' : '' }</button></div>` : '';
+		const deadCrabRow = deadCrabs ? `<div class="gm-row"><span>Dead rock crab <small>${ deadCrabs } in carried trap${ deadCrabs === 1 ? '' : 's' } · no value</small></span><span class="gm-val">$0</span><button class="gm-mini" data-empty-dead>Empty${ pad ? ' (A)' : '' }</button></div>` : '';
+		const total = s.holdValue + crabCount * CRAB_VALUE;
 		this.stand.innerHTML = `
 			<h2>${ v.name }</h2>
-			<p class="gm-sub">${ s.inventory.length || s.crabs ? v.greeting || 'Let\'s see what you caught.' : v.idle || 'Come back when you\'ve got fish.' }</p>
-			<div class="gm-list">${ ( rows || crabRow ) ? `${ rows }${ crabRow }` : '<div class="gm-empty">Your cooler and crab basket are empty.</div>' }</div>
-			<div class="gm-foot"><button class="gm-btn is-ghost" data-close>Leave (${ pad ? 'B / X' : 'E' })</button><button class="gm-btn" data-all ${ s.inventory.length || s.crabs ? '' : 'disabled' }>Sell all · $${ total }${ pad ? ' (A)' : '' }</button></div>`;
+			<p class="gm-sub">${ s.inventory.length || crabCount ? v.greeting || 'Let\'s see what you caught.' : v.idle || 'Come back when you\'ve got fish.' }</p>
+			<div class="gm-list">${ ( rows || crabRow || deadCrabRow ) ? `${ rows }${ crabRow }${ deadCrabRow }` : '<div class="gm-empty">Your cooler and crab traps are empty.</div>' }</div>
+			<div class="gm-foot"><button class="gm-btn is-ghost" data-close>Leave (${ pad ? 'B / X' : 'E' })</button><button class="gm-btn" data-all ${ s.inventory.length || crabCount ? '' : 'disabled' }>Sell all · $${ total }${ pad ? ' (A)' : '' }</button></div>`;
 		this.stand.querySelector( '[data-close]' ).onclick = () => this.closeStand();
 		this.stand.querySelector( '[data-all]' ).onclick = () => this.game.sellAll();
 		for ( const b of this.stand.querySelectorAll( '[data-sell]' ) ) b.onclick = () => this.game.sell( [ Number( b.dataset.sell ) ] );
 		const crabButton = this.stand.querySelector( '[data-sell-crabs]' );
 		if ( crabButton ) crabButton.onclick = () => this.game.sellCrabs();
+		const emptyDeadButton = this.stand.querySelector( '[data-empty-dead]' );
+		if ( emptyDeadButton ) emptyDeadButton.onclick = () => this.game.emptyDeadCrabTraps();
 		this._setControllerFocus( '[data-all]' );
 
 	}

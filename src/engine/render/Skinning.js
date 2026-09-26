@@ -155,10 +155,10 @@ function sampleChannel( ch, t, out ) {
 export class SkinnedModel {
 
 	// gltf: result of loadGLB / parseGLB. Uses the first skin.
-	static async create( gltf, { materials = null, textureSize = null } = {} ) {
+	static async create( gltf, { materials = null, textureSize = null, textureCache = null } = {} ) {
 
 		const m = new SkinnedModel( gltf );
-		await m._buildMeshes( materials );
+		await m._buildMeshes( materials, textureCache );
 		return m;
 
 	}
@@ -212,11 +212,11 @@ export class SkinnedModel {
 
 	}
 
-	async _buildMeshes( materialOptions ) {
+	async _buildMeshes( materialOptions, textureCache = null ) {
 
 		const g = this.gltf;
 		// textures (shared between materials that use the same image)
-		const texCache = new Map();
+		const texCache = textureCache || new Map();
 		const tex = async ( info, srgb ) => {
 
 			if ( ! info ) return null;
