@@ -29,7 +29,10 @@ export function parseGLB( buffer ) {
 	}
 
 	if ( ! json ) throw new Error( 'GLB: no JSON chunk' );
-	if ( json.extensionsRequired && json.extensionsRequired.length ) throw new Error( 'GLB: unsupported extensions ' + json.extensionsRequired.join( ', ' ) );
+	// This reader consumes geometry only. Specular-glossiness changes how a renderer
+	// shades a material, not the mesh data, so it is safe to ignore for static props.
+	const unsupported = ( json.extensionsRequired || [] ).filter( ( extension ) => extension !== 'KHR_materials_pbrSpecularGlossiness' );
+	if ( unsupported.length ) throw new Error( 'GLB: unsupported extensions ' + unsupported.join( ', ' ) );
 
 	// accessor -> tightly packed typed array (+ item size, normalized)
 	const read = ( i ) => {
@@ -119,7 +122,7 @@ export function parseGLB( buffer ) {
 
 				}
 
-				meshes.push( { name: node.name || mesh.name || 'mesh' + node.mesh + ( pi ? '_' + pi : '' ), geometry: g } );
+				meshes.push( { name: node.name || mesh.name || 'mesh' + node.mesh + ( pi ? '_' + pi : '' ), geometry: g, material: prim.material ?? 0 } );
 
 			} );
 

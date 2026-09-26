@@ -135,6 +135,12 @@ ok( sale.count === 1 && s.money === a.value && s.inventory.length === 1, 'sellin
 s.addCrabs( 3 );
 const crabSale = s.sellCrabs();
 ok( crabSale.count === 3 && crabSale.total === 9 && s.crabs === 0, 'harvested crabs can be sold to Joe' );
+// Beach grill progress belongs to the save: raw crab is $3, while a watched and
+// plated grilled crab has the promised $6 counter value.
+s.grill = { litUntil: Date.now() + 1000, cooking: { kind: 'crab', name: 'Rock crab', value: 6, readyAt: Date.now(), burnAt: Date.now() + 1000 }, plated: [ { kind: 'crab', name: 'Rock crab', value: 6 } ] };
+s.save();
+const grillSave = new GameState( storage );
+ok( grillSave.load() && grillSave.grill.plated.length === 1 && grillSave.grill.plated[ 0 ].value === 6 && grillSave.grill.cooking.kind === 'crab', 'grill timer and plated premium food persist across a save' );
 s.upgrades.hold = 1;
 const s2 = new GameState( storage );
 s.save();
