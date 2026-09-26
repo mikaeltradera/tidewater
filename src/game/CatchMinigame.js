@@ -28,7 +28,7 @@ export class CatchMinigame {
 		this.surge = 0;
 		this.slack = 0;
 		this.time = 0;
-		this.band = [ 0.3, 0.85 ];
+		this.band = [ 0.3, 0.8 ];
 		this.overload = 0; // seconds above the breaking point: the line snaps only if it's held there
 		this._nextSurge = 1.2 + rng() * 2;
 		this._surgeT = 0;
@@ -57,8 +57,10 @@ export class CatchMinigame {
 
 		// the fish's pull (0..~1.6) and the tension it and the reel make
 		const pull = this.power * ( 0.35 + 0.65 * this.surge ) * ( 1 - 0.65 * tired );
-		const target = reeling ? 0.25 + pull * 0.95 + 0.25 : pull * 0.72;
-		const rate = reeling ? 2.2 : 3.0;
+		// Continuous reeling should be tempting but not always optimal: a fresh fish's run can now
+		// lift tension just above the green band, asking the player to ease off briefly.
+		const target = reeling ? 0.3 + pull * 1.02 + 0.27 : pull * 0.72;
+		const rate = reeling ? 2.45 : 3.0;
 		this.tension += ( target - this.tension ) * ( 1 - Math.exp( - dt * rate ) );
 
 		// line in / out
