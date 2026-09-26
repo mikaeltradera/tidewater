@@ -273,7 +273,8 @@ export class Game {
 		p.busy = rod.lineInWater || rod.state === 'windup';
 
 		this.updateBoat( dt );
-		this.crabTraps.update( dt );
+		this.crabTraps.update( dt, p.position );
+		this.crabTraps.updateCarryVisual( app.camera, ( p.mode === 'walk' || p.mode === 'swim' ) && ! rod.equipped );
 		const usingTrap = this.updateCrabTraps( inp, p );
 
 		// the traders
@@ -304,8 +305,12 @@ export class Game {
 	updateCrabTraps( inp, p ) {
 
 		if ( this.fight || this._cardDismissed || ! [ 'walk', 'swim' ].includes( p.mode ) ) return false;
+		// At a trader's counter, talking and selling must win over the general "place trap"
+		// action. This lets a player carry a full trap directly to Joe and sell its catch.
+		if ( p.mode === 'walk' && this.vendors.some( ( vendor ) => vendor.inRange( p.position ) ) ) return false;
 		const traps = this.crabTraps;
 		const nearby = traps.nearbyPlaced( p.position );
+		const canTake = traps.canTake( p.position );
 		const canDrop = traps.canDrop( p.position );
 		if ( nearby && traps.carried < CRAB_TRAP_CARRY_LIMIT ) {
 
@@ -313,7 +318,19 @@ export class Game {
 			if ( inp.hit( 'KeyE' ) ) {
 
 				const count = traps.haul( nearby );
-				if ( count !== null ) this.toast( count ? `Trap hauled · ${ count } crab${ count === 1 ? '' : 's' } ready for Joe` : 'Trap hauled empty' );
+				if ( count !== null ) this.toast( count ? `Trap hauled · ${ count } crab${ count === 1 ? '' : 's' } secured inside` : 'Trap hauled empty' );
+
+			}
+			return true;
+
+		}
+		if ( canTake ) {
+
+			p.prompt = { key: 'E', text: `Pick up crab trap · ${ traps.carried } / ${ CRAB_TRAP_CARRY_LIMIT } carried` };
+			if ( inp.hit( 'KeyE' ) ) {
+
+				traps.take( p.position );
+				this.toast( `Crab trap picked up · carry ${ traps.carried } / ${ CRAB_TRAP_CARRY_LIMIT }` );
 
 			}
 			return true;
@@ -321,28 +338,21 @@ export class Game {
 		}
 		if ( canDrop ) {
 
-			p.prompt = { key: 'E', text: `Drop crab trap · ${ traps.carried } / ${ CRAB_TRAP_CARRY_LIMIT } carried` };
+			p.prompt = { key: 'E', text: `Place crab trap · ${ traps.carried } / ${ CRAB_TRAP_CARRY_LIMIT } carried` };
 			if ( inp.hit( 'KeyE' ) ) {
 
 				const result = traps.drop( p.position, this.app.camera.rotation.y );
 				if ( result ) {
 
-					const fillSeconds = trapFillSeconds( result.trap.x, result.trap.z );
-					this.toast( fillSeconds === 45 ? 'Crab trap dropped · rocky water: fastest catch rate' : fillSeconds === 75 ? 'Crab trap dropped · deep water: good catch rate' : 'Crab trap dropped · shallow beach water fills slowly' );
+					if ( ! result.submerged ) this.toast( 'Crab trap placed on land · it will stay empty' );
+					else {
+
+						const fillSeconds = trapFillSeconds( result.trap.x, result.trap.z );
+						this.toast( fillSeconds === 45 ? 'Crab trap dropped · rocky water: fastest catch rate' : fillSeconds === 75 ? 'Crab trap dropped · deep water: good catch rate' : 'Crab trap dropped · shallow beach water fills slowly' );
+
+					}
 
 				}
-
-			}
-			return true;
-
-		}
-		if ( traps.canTake( p.position ) ) {
-
-			p.prompt = { key: 'E', text: `Pick up crab trap · ${ traps.carried } / ${ CRAB_TRAP_CARRY_LIMIT } carried` };
-			if ( inp.hit( 'KeyE' ) ) {
-
-				traps.take( p.position );
-				this.toast( `Crab trap picked up · carry ${ traps.carried } / ${ CRAB_TRAP_CARRY_LIMIT }` );
 
 			}
 			return true;
@@ -462,7 +472,7 @@ export class Game {
 	sellAll() {
 
 		const r = this.state.sell();
-		const crabs = this.state.sellCrabs();
+		const crabs = this.sellCrabs( false );
 		const total = r.total + crabs.total;
 		if ( total ) this.toast( `Sold ${ r.count } fish${ crabs.count ? ` and ${ crabs.count } crab${ crabs.count === 1 ? '' : 's' }` : '' } for $${ total }` );
 		if ( this.app.audio && this.app.audio.coin ) this.app.audio.coin();
@@ -478,11 +488,21 @@ export class Game {
 
 	}
 
-	sellCrabs() {
+	sellCrabs( notify = true ) {
 
-		const r = this.state.sellCrabs();
-		if ( r.count ) this.toast( `Sold ${ r.count } crab${ r.count === 1 ? '' : 's' } for $${ r.total }` );
+		const trapped = this.crabTraps.sellCarriedCrabs();
+		this.state.credit( trapped.total );
+		const r = trapped;
+		if ( notify && r.count ) this.toast( `Sold ${ r.count } crab${ r.count === 1 ? '' : 's' } for $${ r.total }` );
 		return r;
+
+	}
+
+	emptyDeadCrabTraps() {
+
+		const count = this.crabTraps.emptyCarriedDeadTraps();
+		if ( count ) this.toast( `Emptied ${ count } dead crab${ count === 1 ? '' : 's' } from your trap${ count === 1 ? '' : 's' }` );
+		return count;
 
 	}
 

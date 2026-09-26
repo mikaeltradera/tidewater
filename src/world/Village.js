@@ -353,13 +353,17 @@ export class Village {
 
 		cluster( [
 			[ 'barrel', X + 2.4, - 62.4, 0.4 ], [ 'barrel', X + 3.05, - 62.9, 1.9 ], [ 'crate', X + 2.6, - 61.2, 0.1 ],
-			[ 'crate', X + 2.65, - 61.25, 0.4, 0.4 ], [ 'trap', X - 2.6, - 61.0, 0.05 ], [ 'trap', X - 2.65, - 61.6, 0.08 ], [ 'trap', X - 2.6, - 61.3, 0.2, 0.31 ],
+			// The original decorative trap pile at X - 2.6 / -61 is now the interactive
+			// crab-trap supply stack created by CrabTraps.js.
+			[ 'crate', X + 2.65, - 61.25, 0.4, 0.4 ],
 			[ 'crate', X - 3.4, - 62.4, 0.6 ],
 			[ 'trap', 64.5, - 61.6, 0.3 ], [ 'trap', 65.3, - 61.2, 0.15 ], [ 'trap', 64.9, - 61.4, 0.5, 0.31 ], [ 'trap', 64.6, - 61.5, 1.9, 0.62 ],
 			[ 'barrel', 71.3, - 62.3, 0.1 ], [ 'crate', 71.1, - 61.2, 0.3 ], [ 'crate', 71.9, - 61.4, 1.3 ],
 			[ 'trap', 83.2, - 67.4, 0.4 ], [ 'trap', 83.9, - 67.9, 0.2 ], [ 'barrel', 82.6, - 68.9, 0.7 ],
 			[ 'crate', 88.0, - 53.0, 0.2 ], [ 'crate', 88.1, - 53.0, 0.6, 0.4 ], [ 'barrel', 89.0, - 52.2, 0.3 ],
-			[ 'trap', 34.6, - 68.6, 0.3 ], [ 'trap', 35.3, - 68.2, 0.1 ], [ 'crate', 39.6, - 68.9, 0.5 ],
+			// The old decorative traps between the pier entrance and the light-blue house were
+			// removed so this beach approach stays clear.
+			[ 'crate', 39.6, - 68.9, 0.5 ],
 		] );
 
 		// loose buoys and rope coils on the sand

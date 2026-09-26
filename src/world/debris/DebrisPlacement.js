@@ -296,6 +296,9 @@ export class DebrisPlacer {
 		O.capsule( pier.x, pier.zStart - 3, pier.x, pier.zEnd + pier.headDepth, pier.width / 2, 0.6, 'pier' );
 		const sp = WORLD.spawn.position;
 		O.circle( sp.x, sp.z, 3.5, 0, 'spawn' );
+		// Keep the usable crab-trap supply stack beside the yellow rowboat clear. In particular,
+		// storm-line driftwood must never be generated through the four pots.
+		O.circle( 60.4, - 63.2, 3.4, 0, 'crabTrapCache' );
 		// big village props registered as footprints (boats, wreck, racks)
 		if ( this.village ) for ( const f of this.village.getFootprints() ) if ( f.kind === 'prop' ) O.circle( f.x, f.z, f.r * 0.55, 0, 'prop' );
 
@@ -480,7 +483,7 @@ export class DebrisPlacer {
 
 		// the market plaza and the pier foot get a few more crates, barrels and baskets of floats
 		const extra = [
-			[ 'crates', 34.4, - 114.4, 0.3 ], [ 'barrels', 47.6, - 114.8, - 0.4 ], [ 'traps', 60.4, - 63.2, 0.2 ],
+			[ 'crates', 34.4, - 114.4, 0.3 ], [ 'barrels', 47.6, - 114.8, - 0.4 ],
 			[ 'crates', 50.6, - 62.5, - 0.2 ], [ 'traps', 76.2, - 66.0, - 0.1 ], [ 'junk', 86.5, - 66.5, 0.3 ],
 			[ 'barrels', 42.2, - 67.8, 0.5 ], [ 'crates', 96.8, - 62.8, - 0.1 ],
 		];

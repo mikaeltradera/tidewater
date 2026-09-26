@@ -87,8 +87,8 @@ const CARDS = [
 	{
 		eyebrow: 'Crab traps',
 		title: 'Set, soak, haul',
-		body: `<p>Pick up crab traps from either stack: on the beach in front of the original traps, or at the pier end by the boat. You can carry <b>two at once</b>, then drop them onto the seabed with <kbd>E</kbd>.</p>
-			<p>Each trap holds up to <b>six crabs</b>. Rocky water fills fastest; deeper water beyond the pier is also productive, while shallow beach water is slower. Haul a trap with <kbd>E</kbd>, then sell the crabs to Joe.</p>`,
+		body: `<p>Pick up crab traps from either stack: at the pier end by the boat, or beside the yellow rowboat on the beach. You can carry <b>two at once</b> and place them anywhere with <kbd>E</kbd>.</p>
+			<p>Only a submerged trap catches crabs; a trap placed on land stays empty. Each underwater trap holds up to <b>six crabs</b>. Rocky water fills fastest; deeper water beyond the pier is also productive, while shallow beach water is slower.</p>`,
 	},
 	{
 		eyebrow: 'Getting around',
@@ -123,8 +123,8 @@ const CONTROLLER_CARDS = [
 	{
 		eyebrow: 'Crab traps · Xbox controller',
 		title: 'Set, soak, haul',
-		body: `<p>Pick up crab traps from either stack: on the beach in front of the original traps, or at the pier end by the boat. Carry up to <b>two</b>, then press <kbd>X</kbd> over submerged seabed to drop one.</p>
-			<p>Rocky water fills traps fastest; deeper water beyond the pier is also productive. Press <kbd>X</kbd> beside a trap to haul up to six crabs, then sell them to Joe.</p>`,
+		body: `<p>Pick up crab traps from either stack: at the pier end by the boat, or beside the yellow rowboat on the beach. Carry up to <b>two</b>, then press <kbd>X</kbd> to place one anywhere.</p>
+			<p>Only submerged traps catch crabs; land traps stay empty. Rocky water fills traps fastest and deeper water beyond the pier is also productive. Press <kbd>X</kbd> beside a trap to haul it.</p>`,
 	},
 	{
 		eyebrow: 'Getting around · Xbox controller',
