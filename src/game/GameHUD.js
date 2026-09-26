@@ -1,5 +1,5 @@
-import { FISH, fishLengthCm } from './FishTable.js';
-import { UPGRADES, nextLevel, FUEL_PRICE } from './Gear.js';
+import { FISH, fishLengthCm, fishGearTier } from './FishTable.js';
+import { UPGRADES, nextLevel, FUEL_PRICE, FISHING_TIERS, fishingGearTier } from './Gear.js';
 import { FishPortrait } from './FishPortrait.js';
 import { DRINKS } from './Roadhouse.js';
 
@@ -23,6 +23,8 @@ const CSS = /* css */`
 .gm-cooler-bar { width: calc(64 * var(--tw-u)); height: calc(5 * var(--tw-u)); border-radius: 99px; background: var(--tw-fill-2); overflow: hidden; }
 .gm-cooler-bar > span { display: block; height: 100%; width: 0; background: var(--tw-aqua); border-radius: inherit; transition: width var(--tw-med) var(--tw-ease); }
 .gm-cooler.is-full .gm-cooler-bar > span { background: var(--tw-coral); }
+.gm-gear { display: flex; align-items: center; gap: calc(5 * var(--tw-u)); color: var(--tw-ink-2); font-size: var(--tw-fs-sm); white-space: nowrap; }
+.gm-gear i { width: calc(9 * var(--tw-u)); height: calc(9 * var(--tw-u)); border-radius: 50%; background: var(--gear-color, var(--tw-ink-3)); box-shadow: 0 0 10px color-mix(in srgb, var(--gear-color, var(--tw-ink-3)) 65%, transparent); }
 .gm-fight { position: absolute; left: 50%; bottom: calc(max(calc(72 * var(--tw-u)), 13vh) + calc(58 * var(--tw-u))); transform: translateX(-50%);
 	width: calc(360 * var(--tw-u)); padding: var(--tw-3) var(--tw-4); border-radius: var(--tw-r-lg); font: 500 var(--tw-fs-md) var(--tw-font); color: var(--tw-ink);
 	opacity: 0; transition: opacity var(--tw-med) var(--tw-ease); pointer-events: none; }
@@ -77,6 +79,14 @@ const CSS = /* css */`
 .gm-shop-row { display: grid; grid-template-columns: 1fr auto; gap: var(--tw-3); align-items: center; padding: var(--tw-2) 0; border-bottom: 1px solid var(--tw-line); }
 .gm-shop-row small { display: block; color: var(--tw-ink-3); font-size: var(--tw-fs-sm); margin-top: 2px; }
 .gm-shop-row .gm-have { color: var(--tw-ink-3); font-size: var(--tw-fs-sm); }
+.gm-shop-tier { display: inline-flex; align-items: center; gap: 6px; margin-top: 3px; font-size: var(--tw-fs-sm); color: var(--gear-color); font-weight: 600; }
+.gm-shop-tier i, .gm-tier-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--gear-color); box-shadow: 0 0 8px color-mix(in srgb, var(--gear-color) 65%, transparent); }
+.gm-gear-guide { margin-top: var(--tw-3); padding-top: var(--tw-3); border-top: 1px solid var(--tw-line); }
+.gm-gear-guide b { display: block; margin-bottom: var(--tw-1); }
+.gm-tier-row { --gear-color: var(--tw-ink-3); padding: calc(5 * var(--tw-u)) 0; color: var(--tw-ink-2); }
+.gm-tier-row.is-locked { opacity: 0.52; }
+.gm-tier-row strong { color: var(--gear-color); font-size: var(--tw-fs-sm); }
+.gm-tier-row small { display: block; margin: 2px 0 0 calc(14 * var(--tw-u)); color: var(--tw-ink-3); font-size: var(--tw-fs-xs); line-height: 1.35; }
 .gm-log { margin-top: var(--tw-3); color: var(--tw-ink-3); font-size: var(--tw-fs-sm); line-height: 1.5; }
 .gm-row .gm-cm { font-family: var(--tw-mono); color: var(--tw-ink-3); }
 .gm-row.has-cm { grid-template-columns: 1fr auto auto auto auto; }
@@ -164,6 +174,19 @@ const h = ( tag, cls, html ) => {
 
 };
 
+function fishingGuide( upgrades ) {
+
+	const current = fishingGearTier( upgrades );
+	const rows = FISHING_TIERS.map( ( tier, i ) => {
+
+		const fish = Object.entries( FISH ).filter( ( [ id ] ) => fishGearTier( id ) === i ).map( ( [ , f ] ) => f.name ).join( ', ' );
+		return `<div class="gm-tier-row ${ i > current ? 'is-locked' : '' }" style="--gear-color:${ tier.color }"><strong><i class="gm-tier-dot"></i> ${ tier.name }</strong><small>${ tier.requirement } · ${ fish }</small></div>`;
+
+	} ).join( '' );
+	return `<div class="gm-gear-guide"><b>Fishing access · Rod + reel must both match the level</b>${ rows }</div>`;
+
+}
+
 export class GameHUD {
 
 	constructor( ui, game ) {
@@ -174,7 +197,7 @@ export class GameHUD {
 		style.textContent = CSS;
 		document.head.append( style );
 
-		this.purse = h( 'div', 'gm-purse tw-glass', `<span class="gm-money">$0</span><span class="gm-cooler"><span class="gm-cooler-label">Cooler</span><span class="gm-cooler-bar"><span></span></span><span class="gm-cooler-kg">0 / 30 kg</span></span><span class="gm-gauge gm-fuel"><span>Fuel</span><span class="gm-cooler-bar gm-fuel-bar"><span></span></span><b class="gm-fuel-l">40 L</b></span><span class="gm-gauge gm-sonar"><span>Sonar</span><b class="gm-sonar-d">0 m</b><span class="gm-sonar-dots"></span></span>` );
+		this.purse = h( 'div', 'gm-purse tw-glass', `<span class="gm-money">$0</span><span class="gm-gear"><i></i><span>Fishing · L1</span></span><span class="gm-cooler"><span class="gm-cooler-label">Cooler</span><span class="gm-cooler-bar"><span></span></span><span class="gm-cooler-kg">0 / 30 kg</span></span><span class="gm-gauge gm-fuel"><span>Fuel</span><span class="gm-cooler-bar gm-fuel-bar"><span></span></span><b class="gm-fuel-l">40 L</b></span><span class="gm-gauge gm-sonar"><span>Sonar</span><b class="gm-sonar-d">0 m</b><span class="gm-sonar-dots"></span></span>` );
 		this.fuelEl = this.purse.querySelector( '.gm-fuel' );
 		this.fuelBar = this.purse.querySelector( '.gm-fuel-bar > span' );
 		this.fuelL = this.purse.querySelector( '.gm-fuel-l' );
@@ -182,6 +205,8 @@ export class GameHUD {
 		this.sonarD = this.purse.querySelector( '.gm-sonar-d' );
 		this.sonarDots = this.purse.querySelector( '.gm-sonar-dots' );
 		this.moneyEl = this.purse.querySelector( '.gm-money' );
+		this.gearEl = this.purse.querySelector( '.gm-gear' );
+		this.gearName = this.gearEl.querySelector( 'span' );
 		this.coolerEl = this.purse.querySelector( '.gm-cooler' );
 		this.coolerBar = this.purse.querySelector( '.gm-cooler-bar > span' );
 		this.coolerKg = this.purse.querySelector( '.gm-cooler-kg' );
@@ -230,6 +255,9 @@ export class GameHUD {
 		const s = this.game.state;
 		const st = s.stats;
 		this.moneyEl.textContent = `$${ s.money.toLocaleString() }`;
+		const fishingTier = FISHING_TIERS[ fishingGearTier( s.upgrades ) ];
+		this.gearEl.style.setProperty( '--gear-color', fishingTier.color );
+		this.gearName.textContent = `Fishing · L${ fishingGearTier( s.upgrades ) + 1 }`;
 		const kg = s.holdKg;
 		this.coolerLabel.textContent = s.upgrades.hold > 0 ? 'Hold' : 'Cooler';
 		this.coolerKg.textContent = `${ kg.toFixed( 1 ) } / ${ st.holdKg } kg`;
@@ -437,6 +465,7 @@ export class GameHUD {
 			<p class="gm-sub">${ s.inventory.length } fish · ${ s.holdKg.toFixed( 1 ) } of ${ s.stats.holdKg } kg · worth $${ s.holdValue }</p>
 			<div class="gm-list">${ rows || '<div class="gm-empty">Nothing yet. Cast from the pier, the beach or the boat.</div>' }</div>
 			${ logged ? `<div class="gm-log"><b>Fish log</b><br>${ logged }</div>` : '' }
+			${ fishingGuide( s.upgrades ) }
 			<div class="gm-foot"><span class="gm-sub">${ pad ? 'D-pad select · A confirm · B / X close' : 'Sell at the fish stand by the pier' }</span><button class="gm-btn is-ghost" data-close>Close (${ pad ? 'B / X' : 'I' })</button></div>`;
 		this.inv.querySelector( '[data-close]' ).onclick = () => this.toggleInventory( false );
 		for ( const b of this.inv.querySelectorAll( '[data-release]' ) ) b.onclick = () => s.release( Number( b.dataset.release ) );
@@ -494,10 +523,14 @@ GameHUD.prototype.renderShop = function () {
 
 		const cur = track.levels[ s.upgrades[ key ] | 0 ];
 		const next = nextLevel( s.upgrades, key );
+		const fishingGear = key === 'rod' || key === 'reel';
+		const tier = fishingGear ? FISHING_TIERS[ cur.fishingTier ] : null;
+		const nextTier = fishingGear && next ? FISHING_TIERS[ next.fishingTier ] : null;
 		const btn = next
 			? `<button class="gm-btn" data-buy="${ key }" ${ next.cost > s.money ? 'disabled' : '' }>$${ next.cost }</button>`
 			: '<span class="gm-have">Top of the line</span>';
-		return `<div class="gm-shop-row"><span>${ track.name }: ${ next ? next.label : cur.label }<small>Now: ${ cur.label }</small></span>${ btn }</div>`;
+		const gearDetail = fishingGear ? `<span class="gm-shop-tier" style="--gear-color:${ tier.color }"><i></i>${ tier.name }</span><small>${ nextTier ? `Next unlock: ${ nextTier.description }` : 'Gold level: every fish class unlocked' }</small>` : `<small>Now: ${ cur.label }</small>`;
+		return `<div class="gm-shop-row"><span>${ track.name }: ${ next ? next.label : cur.label }${ gearDetail }</span>${ btn }</div>`;
 
 	} ).join( '' );
 	const missing = s.stats.fuelL - s.fuelL;

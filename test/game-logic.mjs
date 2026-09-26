@@ -1,9 +1,9 @@
 // Plain-node tests of the fishing game logic (no GPU): bites, the catch fight, inventory, save.
-import { FISH, FISH_IDS, fishValue, fishLengthCm } from '../src/game/FishTable.js';
+import { FISH, FISH_IDS, fishValue, fishLengthCm, fishGearTier } from '../src/game/FishTable.js';
 import { habitatAt, pickSpecies, rollWeight, biteDelay } from '../src/game/Bites.js';
 import { CatchMinigame } from '../src/game/CatchMinigame.js';
 import { GameState } from '../src/game/GameState.js';
-import { gearStats, defaultUpgrades, UPGRADES } from '../src/game/Gear.js';
+import { gearStats, defaultUpgrades, UPGRADES, FISHING_TIERS, fishingGearTier } from '../src/game/Gear.js';
 
 let fails = 0;
 const ok = ( c, msg ) => {
@@ -69,6 +69,16 @@ for ( const id of FISH_IDS ) {
 
 }
 ok( fishValue( 'redSnapper', 5 ) > fishValue( 'redSnapper', 2 ), 'bigger fish is worth more' );
+{
+	const starter = defaultUpgrades();
+	const offshore = { ...starter, rod: 4, reel: 4 };
+	ok( FISHING_TIERS.length === 5 && FISHING_TIERS[ 4 ].name.includes( 'Gold' ), 'five fishing gear levels end with gold offshore gear' );
+	ok( fishingGearTier( { ...starter, rod: 4, reel: 2 } ) === 2, 'the lower rod or reel level limits fishing access' );
+	ok( fishingGearTier( offshore ) === 4, 'matching level-five rod and reel unlock offshore access' );
+	ok( pickSpecies( habitatAt( spots.deep ), 12, rng, ( id ) => fishGearTier( id ) <= 0 ) === null, 'starter gear cannot hook premium offshore fish' );
+	const coastal = pickSpecies( habitatAt( spots.reef ), 12, rng, ( id ) => fishGearTier( id ) <= 2 );
+	ok( coastal && fishGearTier( coastal ) <= 2, 'gear filter only selects fish unlocked by the kit' );
+}
 
 // ---- the fight: three players
 const policies = {
@@ -161,7 +171,7 @@ ok( Object.keys( defaultUpgrades() ).length === Object.keys( UPGRADES ).length &
 	const m = new Map();
 	const st = new GameState( { getItem: ( k ) => m.get( k ) ?? null, setItem: ( k, v ) => m.set( k, v ) } );
 	st.money = 100;
-	ok( st.buy( 'reel' ) && st.upgrades.reel === 1 && st.money === 10 && st.stats.reelSpeed === 1.6, 'buying the reel upgrade' );
+	ok( st.buy( 'reel' ) && st.upgrades.reel === 1 && st.money === 45 && st.stats.reelSpeed === 1.35, 'buying the reel upgrade' );
 	ok( st.buy( 'reel' ) === null && st.upgrades.reel === 1, 'cannot buy what you cannot afford' );
 	ok( st.fuelL === 40 && st.burn( 30 ) === 10 && st.refuelCost() === 45, 'fuel burns and costs to refill' );
 	st.money = 20;

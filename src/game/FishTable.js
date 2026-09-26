@@ -35,6 +35,23 @@ export const FISH = {
 
 export const FISH_IDS = Object.keys( FISH );
 
+// The species table already defines the authentic catch, size, value and habitat data. This map
+// adds only the progression band required to hook each fish: 0 = Level 1 starter gear through
+// 4 = Level 5 gold offshore gear.
+export const FISH_GEAR_TIER = {
+	silverside: 0, mullet: 0, needlefish: 0, sergeant: 0, chromis: 0,
+	grunt: 1, tang: 1,
+	yellowtail: 2, parrot: 2,
+	angel: 3, wrasse: 3, jack: 3,
+	barracuda: 4, grouper: 4, redSnapper: 4, tuna: 4, mahi: 4, tarpon: 4,
+};
+
+export function fishGearTier( id ) {
+
+	return FISH_GEAR_TIER[ id ] ?? 0;
+
+}
+
 // $ value of a fish; trophy-sized ones fetch a bit more per kg
 export function fishValue( id, kg ) {
 
