@@ -65,6 +65,13 @@ export class FishStand {
 		if ( colliders ) {
 
 			colliders.addBox( new Vector3( STAND.x, y + 1.2, STAND.z ), new Vector3( 1.45, 1.2, 0.95 ), STAND.yaw, { tag: 'fishStand' } );
+			// A thin sloped sheet follows the corrugated canopy of both the photoscanned
+			// and fallback stalls. It blocks jumps into the eave without turning the
+			// open customer side into a larger invisible wall.
+			colliders.addSurface( roofPoints( STAND, y, [
+				[ - 1.55, 2.23, - 1.04 ], [ 1.55, 2.23, - 1.04 ],
+				[ 1.55, 2.57, 1.12 ], [ - 1.55, 2.57, 1.12 ],
+			] ), 0.05 ).tag = 'fishStandRoof';
 			// the crates, the bucket and the chalkboard around it
 			for ( const [ lx, lz, hx, hz, hy ] of [ [ - 1.85, 0.25, 0.45, 0.25, 0.35 ], [ 1.8, - 0.2, 0.3, 0.6, 0.23 ], [ 1.55, 1.05, 0.2, 0.2, 0.28 ], [ 1.95, 1.45, 0.35, 0.25, 0.42 ] ] ) {
 
@@ -103,6 +110,17 @@ export class FishStand {
 		this.vendor.update( dt, player );
 
 	}
+
+}
+
+function roofPoints( stand, groundY, points ) {
+
+	return points.map( ( [ x, y, z ] ) => {
+
+		const p = new Vector3( x, y + groundY, z ).applyAxisAngle( new Vector3( 0, 1, 0 ), stand.yaw );
+		return p.add( new Vector3( stand.x, 0, stand.z ) );
+
+	} );
 
 }
 

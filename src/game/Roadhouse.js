@@ -46,6 +46,9 @@ export class Roadhouse {
 		if ( colliders ) {
 
 			colliders.addBox( new Vector3( ROADHOUSE.x, y + 1.1, ROADHOUSE.z ), new Vector3( 2.0, 1.1, 1.1 ), ROADHOUSE.yaw, { tag: 'roadhouse' } );
+			// The corrugated canopy is a separate thin surface, preserving the open-air
+			// feel while preventing jumps or camera movement through its underside.
+			colliders.addSurface( roadhouseRoofPoints( y ), 0.06 ).tag = 'roadhouseRoof';
 
 		}
 
@@ -141,6 +144,17 @@ export class Roadhouse {
 		return key;
 
 	}
+
+}
+
+function roadhouseRoofPoints( groundY ) {
+
+	return [ [ - 1.98, - 1.25 ], [ 1.98, - 1.25 ], [ 1.98, 1.25 ], [ - 1.98, 1.25 ] ].map( ( [ x, z ] ) => {
+
+		const p = new Vector3( x, groundY + 2.58, z ).applyAxisAngle( new Vector3( 0, 1, 0 ), ROADHOUSE.yaw );
+		return p.add( new Vector3( ROADHOUSE.x, 0, ROADHOUSE.z ) );
+
+	} );
 
 }
 

@@ -14,6 +14,7 @@ import {
 import { createPlantLeafMaterial, createCanopyMaterial, createCanopyBakeMaterials, impostorColor, uCanopyNear } from './vegetation/VegMaterials.js';
 import { ImpostorAtlas, buildImpostorQuad } from './vegetation/Impostors.js';
 import { LeafAtlas } from './vegetation/LeafTextures.js';
+import { TreeColliders } from './vegetation/TreeColliders.js';
 
 // Island vegetation: coconut palms along the back of the beach (leaning to the sea), a closed
 // rainforest canopy on the hillsides and gullies thinning into scattered trees and shrub
@@ -93,7 +94,7 @@ const CANOPY_FAR = [ 2600, 2800 ];
 
 export class Vegetation {
 
-	constructor( { scene, terrain, village = null } ) {
+	constructor( { scene, terrain, village = null, colliders = null } ) {
 
 		this.scene = scene;
 		this.terrain = terrain;
@@ -106,6 +107,7 @@ export class Vegetation {
 		this.site = site;
 		const recs = scatterVegetation( site );
 		this.records = recs;
+		if ( colliders ) colliders.trees = new TreeColliders( recs );
 		const t1 = performance.now();
 		const grassMask = buildGrassMask( site );
 		this.timings = { scatter: t1 - t0, mask: performance.now() - t1 };
