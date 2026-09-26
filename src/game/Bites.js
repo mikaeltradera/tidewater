@@ -37,13 +37,19 @@ export function activity( pref, hour ) {
 
 // Weighted pick of the species that bites here; null when nothing lives here.
 // rng: () => [0, 1)
-export function pickSpecies( habitat, hour, rng = Math.random ) {
+export function pickSpecies( habitat, hour, rng = Math.random, eligible = () => true ) {
 
 	let total = 0;
 	const w = [];
 	for ( const id of FISH_IDS ) {
 
 		const f = FISH[ id ];
+		if ( ! eligible( id, f ) ) {
+
+			w.push( 0 );
+			continue;
+
+		}
 		let hw = 0;
 		for ( const k in f.habitat ) hw += f.habitat[ k ] * habitat[ k ];
 		const x = hw * f.rarity * activity( f.time, hour );

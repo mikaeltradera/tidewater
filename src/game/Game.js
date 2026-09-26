@@ -1,6 +1,6 @@
 import { Vector3, Color } from '../engine/index.js';
 import { WORLD } from '../world/WorldLayout.js';
-import { FISH } from './FishTable.js';
+import { FISH, fishGearTier } from './FishTable.js';
 import { habitatAt, pickSpecies, rollWeight, biteDelay } from './Bites.js';
 import { CatchMinigame } from './CatchMinigame.js';
 import { GameState } from './GameState.js';
@@ -9,7 +9,7 @@ import { FishStand } from './FishStand.js';
 import { Chandlery } from './Chandlery.js';
 import { Roadhouse, DRINKS } from './Roadhouse.js';
 import { CatchDisplay } from './CatchDisplay.js';
-import { UPGRADES, fuelBurn } from './Gear.js';
+import { UPGRADES, fuelBurn, fishingGearTier } from './Gear.js';
 import { GameHUD } from './GameHUD.js';
 import { Minimap } from './Minimap.js';
 import { Guide } from './Guide.js';
@@ -447,6 +447,12 @@ export class Game {
 
 	}
 
+	get fishingTier() {
+
+		return fishingGearTier( this.state.upgrades );
+
+	}
+
 	onBobberLanded( where ) {
 
 		if ( where !== 'water' ) {
@@ -476,7 +482,7 @@ export class Game {
 		if ( b.phase === 'wait' ) {
 
 			const h = this.habitat();
-			const species = pickSpecies( h, this.hour );
+			const species = pickSpecies( h, this.hour, Math.random, ( id ) => fishGearTier( id ) <= this.fishingTier );
 			if ( ! species ) {
 
 				b.t = 8;

@@ -35,12 +35,35 @@ export const FISH = {
 
 export const FISH_IDS = Object.keys( FISH );
 
-// $ value of a fish; trophy-sized ones fetch a bit more per kg
+// The species table already defines the authentic catch, size, value and habitat data. This map
+// adds only the progression band required to hook each fish: 0 = Level 1 starter gear through
+// 4 = Level 5 gold offshore gear.
+export const FISH_GEAR_TIER = {
+	silverside: 0, mullet: 0, needlefish: 0, sergeant: 0, chromis: 0,
+	grunt: 1, tang: 1,
+	yellowtail: 2, parrot: 2,
+	angel: 3, wrasse: 3, jack: 3,
+	barracuda: 4, grouper: 4, redSnapper: 4, tuna: 4, mahi: 4, tarpon: 4,
+};
+
+export function fishGearTier( id ) {
+
+	return FISH_GEAR_TIER[ id ] ?? 0;
+
+}
+
+// $ value of a fish. Every landed fish earns a small dock payment so early catches advance the
+// player reliably, while higher gear bands receive progressively better market rates. Trophy-sized
+// specimens still receive the existing premium on top of both rewards.
+const DOCK_BONUS = [ 6, 10, 15, 22, 30 ];
+const MARKET_MULTIPLIER = [ 1.45, 1.6, 1.75, 1.9, 2.1 ];
 export function fishValue( id, kg ) {
 
 	const f = FISH[ id ];
+	const tier = fishGearTier( id );
 	const t = ( kg - f.kg[ 0 ] ) / Math.max( f.kg[ 1 ] - f.kg[ 0 ], 1e-6 );
-	return Math.max( 1, Math.round( f.price * kg * ( 1 + 0.25 * Math.max( 0, t - 0.7 ) / 0.3 ) ) );
+	const trophy = 1 + 0.25 * Math.max( 0, t - 0.7 ) / 0.3;
+	return Math.max( 1, Math.round( DOCK_BONUS[ tier ] + f.price * kg * MARKET_MULTIPLIER[ tier ] * trophy ) );
 
 }
 
