@@ -33,6 +33,8 @@ const _c4 = new THREE.Vector3();
 const _c5 = new THREE.Vector3();
 const _invQ = new THREE.Quaternion();
 const _dq = new THREE.Quaternion();
+const _uprightQ = new THREE.Quaternion();
+const _worldUp = new THREE.Vector3( 0, 1, 0 );
 
 // Rigid-body model of an 8.2 m, 3.2 t Downeast lobster boat (semi-displacement hull, full keel).
 //
@@ -56,6 +58,9 @@ export class BoatController {
 		this.query = query;
 		this.terrain = terrain;
 		this.colliders = colliders;
+		// The jet ski shares this proven water controller with the fishing boat, but has a
+		// much lighter hull, planing hull resistance and a more agile hull response.
+		this.isJetSki = model.group.name === 'JetSki';
 		this.dockCollision = colliders ? new VehicleDockCollision( model, colliders ) : null;
 		this.previousPosition = new THREE.Vector3();
 
@@ -68,12 +73,12 @@ export class BoatController {
 		this.inertia.z *= 1.24;
 		// added mass / inertia when fully wet (fraction of the rigid-body value): surge, sway, heave;
 		// pitch, yaw, roll
-		this.addedMass = new THREE.Vector3( 0.6, 0.7, 0.05 ); // x (sway), y (heave), z (surge)
-		this.addedInertia = new THREE.Vector3( 1.0, 0.4, 0.2 ); // x (pitch), y (yaw), z (roll)
+		this.addedMass = this.isJetSki ? new THREE.Vector3( 0.22, 0.2, 0.08 ) : new THREE.Vector3( 0.6, 0.7, 0.05 ); // x (sway), y (heave), z (surge)
+		this.addedInertia = this.isJetSki ? new THREE.Vector3( 0.18, 0.12, 0.12 ) : new THREE.Vector3( 1.0, 0.4, 0.2 ); // x (pitch), y (yaw), z (roll)
 
 		// effective waterplane: lateral / longitudinal lever arms of the buoyancy samples
 		const cbz = hydro.centerOfBuoyancy ? hydro.centerOfBuoyancy.z : this.com.z;
-		const sx = 0.79, sz = 0.9;
+		const sx = this.isJetSki ? 0.92 : 0.79, sz = this.isJetSki ? 0.96 : 0.9;
 		this.samples = model.hullSamples.map( ( s ) => ( {
 			p: new THREE.Vector3( s.position.x * sx, s.position.y, cbz + ( s.position.z - cbz ) * sz ),
 			area: s.area, bottom: s.bottomY ?? s.position.y,
@@ -84,11 +89,11 @@ export class BoatController {
 		this.slot = query.allocate( 'boatHull', this.samples.length );
 
 		// lateral stations along the keel: (z, lateral area m^2) for hull lift and cross-flow drag
-		this.stations = [ [ - 3.4, 0.73 ], [ - 2.3, 0.78 ], [ - 1.2, 0.8 ], [ - 0.1, 0.77 ], [ 1.0, 0.62 ], [ 2.1, 0.33 ], [ 3.2, 0.14 ] ];
-		this.lateralY = 0.06; // height of the centre of lateral resistance (boat frame)
-		this.bank = 0; // roll moment per (u * drift velocity): hull bottom lift banking into turns
-		this.hullLift = 0.5; // lift coefficient of the hull + keel per radian of drift
-		this.rudderLift = 2.8; // rudder lift slope (x area 0.12 m^2), includes the hull's flap effect
+		this.stations = this.isJetSki ? [ [ - 1.05, 0.16 ], [ - 0.35, 0.23 ], [ 0.45, 0.2 ], [ 1.05, 0.12 ] ] : [ [ - 3.4, 0.73 ], [ - 2.3, 0.78 ], [ - 1.2, 0.8 ], [ - 0.1, 0.77 ], [ 1.0, 0.62 ], [ 2.1, 0.33 ], [ 3.2, 0.14 ] ];
+		this.lateralY = this.isJetSki ? - 0.04 : 0.06; // height of the centre of lateral resistance (boat frame)
+		this.bank = this.isJetSki ? 120 : 0; // roll moment per (u * drift velocity): hull bottom lift banking into turns
+		this.hullLift = this.isJetSki ? 0.82 : 0.5; // lift coefficient of the hull + keel per radian of drift
+		this.rudderLift = this.isJetSki ? 4.6 : 2.8; // rudder lift slope (x area 0.12 m^2), includes the hull's flap effect
 
 		// state (position = model origin at the design waterline)
 		this.position = new THREE.Vector3().copy( WORLD.boatDock.position );
@@ -99,9 +104,9 @@ export class BoatController {
 		this.throttle = 0; // lever -1..1 (moves with some inertia)
 		this.steer = 0; // wheel -1..1
 		this.rpm = 0; // engine 0..1 (spools after the lever)
-		this.maxThrust = 26000; // N, bollard pull at full rpm
-		this.pitchSpeed = 16; // m/s, propeller pitch speed at full rpm (thrust -> 0 there)
-		this.reverseFactor = 0.45; // astern thrust relative to ahead
+		this.maxThrust = this.isJetSki ? 6500 : 26000; // N, bollard pull at full rpm
+		this.pitchSpeed = this.isJetSki ? 25 : 16; // m/s, propeller pitch speed at full rpm (thrust -> 0 there)
+		this.reverseFactor = this.isJetSki ? 0.32 : 0.45; // astern thrust relative to ahead
 		this.driven = false;
 		this.moored = true;
 		this.mooring = { anchor: WORLD.boatDock.position.clone(), heading: WORLD.boatDock.heading };
@@ -295,9 +300,15 @@ export class BoatController {
 			// buoyancy + heave damping against the water's own vertical motion, along world up (in the
 			// boat frame a trimmed hull would turn forward speed into an upward push)
 			_vp.copy( this.angular ).cross( _r.copy( pw ).sub( comW ) ).add( this.velocity );
-			const vy = _vp.y - this.waterV[ i ] * 0.6;
+			// A personal watercraft follows the water more closely than the heavy fishing boat.
+			// Its lighter heave damping lets it rise, fall and bounce naturally over larger waves.
+			const waterFollow = this.isJetSki ? 0.98 : 0.6;
+			const heaveLinear = this.isJetSki ? 360 : 1800;
+			const heaveQuadratic = this.isJetSki ? 150 : 900;
+			const buoyancyScale = this.isJetSki ? 1.2 : 1;
+			const vy = _vp.y - this.waterV[ i ] * waterFollow;
 			const wetK = Math.min( 1, sub / 0.25 ) * s.area;
-			_f.set( 0, RHO * GRAV * s.area * sub - ( 1800 * vy + 900 * vy * Math.abs( vy ) ) * wetK, 0 );
+			_f.set( 0, RHO * GRAV * s.area * sub * buoyancyScale - ( heaveLinear * vy + heaveQuadratic * vy * Math.abs( vy ) ) * wetK, 0 );
 			addForceAt( _f, pw );
 
 		}
@@ -317,7 +328,9 @@ export class BoatController {
 
 		// ---- calm-water resistance (friction + the wave-making hump past hull speed + planing)
 		const au = Math.abs( u );
-		const R = ( 40 * au + 22 * au * au + 3000 * sstep( au, 2.8, 5.4 ) + 55 * au * au * sstep( au, 7, 11 ) ) * wetD;
+		const R = this.isJetSki ?
+			( 12 * au + 2.6 * au * au + 240 * sstep( au, 3, 6 ) + 8 * au * au * sstep( au, 10, 18 ) ) * wetD :
+			( 40 * au + 22 * au * au + 3000 * sstep( au, 2.8, 5.4 ) + 55 * au * au * sstep( au, 7, 11 ) ) * wetD;
 		_p.set( 0, - 0.2, this.com.z );
 		this.toWorld( _p, _p );
 		addForceAt( _f.copy( fwd ).multiplyScalar( - R * Math.sign( u ) ), _p );
@@ -379,15 +392,28 @@ export class BoatController {
 
 		// ---- running trim and rise: the bow lifts over the hump, then the hull runs at a few degrees
 		// with some dynamic lift (only while the hull is in the water)
-		const trim = ( 2.8 * sstep( u, 2.5, 4.8 ) - 0.8 * sstep( u, 4.8, 7.5 ) - 0.4 * sstep( u, 7.5, 10.5 ) ) * DEG;
+		const trim = ( this.isJetSki ?
+			5.5 * sstep( u, 4, 9 ) - 2.2 * sstep( u, 12, 20 ) :
+			2.8 * sstep( u, 2.5, 4.8 ) - 0.8 * sstep( u, 4.8, 7.5 ) - 0.4 * sstep( u, 7.5, 10.5 ) ) * DEG;
 		T.addScaledVector( side, this.pitchStiffness * trim * imm * - 1 );
-		F.addScaledVector( up, m * GRAV * 0.15 * sstep( u, 3.5, 9 ) * imm );
+		F.addScaledVector( up, m * GRAV * ( this.isJetSki ? 0.28 : 0.15 ) * sstep( u, this.isJetSki ? 4 : 3.5, this.isJetSki ? 12 : 9 ) * imm );
 
 		// ---- small extra angular damping (appendages, bilge), scaled by wetness
 		const wd = 0.2 + wetD;
 		// the keel's lift resists roll in proportion to speed (a boat underway rolls much less)
-		_v.set( - aLoc.x * 25000, - aLoc.y * 2000, - aLoc.z * ( 4500 + 900 * au ) ).multiplyScalar( wd ).applyQuaternion( this.quaternion );
+		const pitchDamping = this.isJetSki ? 480 : 25000;
+		const yawDamping = this.isJetSki ? 350 : 2000;
+		const rollDamping = this.isJetSki ? 280 + 90 * au : 4500 + 900 * au;
+		_v.set( - aLoc.x * pitchDamping, - aLoc.y * yawDamping, - aLoc.z * rollDamping ).multiplyScalar( wd ).applyQuaternion( this.quaternion );
 		T.add( _v );
+		// Let waves pitch and roll the jet ski, but continuously bias its hull back toward upright.
+		// A stronger safety recovery below takes over only if it is close to rolling over.
+		if ( this.isJetSki ) {
+
+			_v.crossVectors( up, _worldUp );
+			T.addScaledVector( _v, 900 * ( 0.45 + wetD ) );
+
+		}
 
 		// ---- mooring lines when docked and not driven
 		if ( this.moored && ! this.driven ) {
@@ -424,6 +450,26 @@ export class BoatController {
 
 			_dq.setFromAxisAngle( _v.copy( w ).normalize(), angle );
 			this.quaternion.premultiply( _dq ).normalize();
+
+		}
+
+		if ( this.isJetSki ) {
+
+			const hullUp = _up.set( 0, 1, 0 ).applyQuaternion( this.quaternion );
+			if ( hullUp.y < 0.3 ) {
+
+				const forward = this.forward( _fwd ).setY( 0 );
+				if ( forward.lengthSq() > 1e-6 ) {
+
+					forward.normalize();
+					_uprightQ.setFromAxisAngle( _worldUp, Math.atan2( forward.x, forward.z ) );
+					this.quaternion.slerp( _uprightQ, Math.min( 0.28, h * ( 0.3 - hullUp.y ) * 12 ) );
+					this.angular.x *= 0.35;
+					this.angular.z *= 0.35;
+
+				}
+
+			}
 
 		}
 
@@ -481,12 +527,16 @@ export class BoatController {
 
 	contacts( F, T, comW ) {
 
-		const pts = this.contactPoints || ( this.contactPoints = [
+		const pts = this.contactPoints || ( this.contactPoints = this.isJetSki ? [
+			new THREE.Vector3( 0, - 0.22, 1.05 ), new THREE.Vector3( 0, - 0.28, - 0.95 ),
+			new THREE.Vector3( 0.42, - 0.18, 0.18 ), new THREE.Vector3( - 0.42, - 0.18, 0.18 ),
+		] : [
 			new THREE.Vector3( 0, - 0.7, 3.2 ), new THREE.Vector3( 0, - 0.75, 0 ), new THREE.Vector3( 0, - 0.72, - 3.4 ),
 			new THREE.Vector3( 1.1, - 0.4, 1.5 ), new THREE.Vector3( - 1.1, - 0.4, 1.5 ), new THREE.Vector3( 1.2, - 0.35, - 2.5 ), new THREE.Vector3( - 1.2, - 0.35, - 2.5 ),
 			new THREE.Vector3( 0, 0.2, 4.2 ),
 		] );
 		const pw = _c1, vp = _c2, f = _c3, r = _c4;
+		let grounded = 0;
 		for ( const lp of pts ) {
 
 			this.toWorld( lp, pw );
@@ -494,11 +544,49 @@ export class BoatController {
 			const pen = ground - pw.y;
 			if ( pen > 0 ) {
 
+				grounded ++;
 				vp.copy( this.angular ).cross( r.copy( pw ).sub( comW ) ).add( this.velocity );
-				const fn = pen * 400000 - Math.min( vp.y, 0 ) * 30000;
-				f.set( - vp.x * 6000, Math.max( fn, 0 ), - vp.z * 6000 );
+				const spring = this.isJetSki ? 110000 : 400000;
+				const verticalDamping = this.isJetSki ? 12000 : 30000;
+				const sandDrag = this.isJetSki ? 1500 : 6000;
+				const fn = pen * spring - Math.min( vp.y, 0 ) * verticalDamping;
+				f.set( - vp.x * sandDrag, Math.max( fn, 0 ), - vp.z * sandDrag );
 				F.add( f );
 				T.add( r.copy( pw ).sub( comW ).cross( f ) );
+
+			}
+
+		}
+
+		// A lightweight jet ski should skid back down a sandy shore rather than become pinned by
+		// a boat-sized grounding force. Find the lowest nearby terrain direction (normally the
+		// sea), bleed off the beach-impact speed, and give the hull a firm but recoverable nudge.
+		if ( this.isJetSki && grounded >= 2 ) {
+
+			const originHeight = this.terrain.heightAt( this.position.x, this.position.z );
+			let lowest = originHeight;
+			let bestX = 0, bestZ = 0;
+			for ( let i = 0; i < 8; i ++ ) {
+
+				const angle = i * Math.PI / 4;
+				const x = Math.sin( angle ), z = Math.cos( angle );
+				const height = this.terrain.heightAt( this.position.x + x * 2.5, this.position.z + z * 2.5 );
+				if ( height < lowest ) {
+
+					lowest = height;
+					bestX = x;
+					bestZ = z;
+
+				}
+
+			}
+
+			if ( lowest < originHeight - 0.01 ) {
+
+				F.x += bestX * 7500;
+				F.z += bestZ * 7500;
+				const alongSlope = this.velocity.x * bestX + this.velocity.z * bestZ;
+				if ( alongSlope < 0 ) this.velocity.addScaledVector( _g.set( bestX, 0, bestZ ), - alongSlope * 0.35 );
 
 			}
 
