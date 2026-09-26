@@ -8,6 +8,7 @@ import { FishingRod } from './FishingRod.js';
 import { FishStand } from './FishStand.js';
 import { Chandlery } from './Chandlery.js';
 import { Roadhouse, DRINKS } from './Roadhouse.js';
+import { CrabTraps, CRAB_TRAP_CARRY_LIMIT, trapFillSeconds } from './CrabTraps.js';
 import { CatchDisplay } from './CatchDisplay.js';
 import { UPGRADES, fuelBurn, fishingGearTier } from './Gear.js';
 import { GameHUD } from './GameHUD.js';
@@ -38,6 +39,7 @@ export class Game {
 		this.landing = null; // { species, kg } while the caught fish swings in view
 		this.chandlery = new Chandlery( { scene: app.scene, terrain: app.terrainData, colliders: app.colliders, material: this.stand.material } );
 		this.roadhouse = new Roadhouse( { scene: app.scene, terrain: app.terrainData, colliders: app.colliders, material: this.stand.material } );
+		this.crabTraps = new CrabTraps( { scene: app.scene, terrain: app.terrainData, state: this.state } );
 		this.vendors = [ this.stand.vendor, this.chandlery.vendor, this.roadhouse.vendor ];
 		// boat upgrades: engine (thrust / top speed) and deck floodlights for night fishing
 		const b = app.boatCtl;
@@ -271,11 +273,13 @@ export class Game {
 		p.busy = rod.lineInWater || rod.state === 'windup';
 
 		this.updateBoat( dt );
+		this.crabTraps.update( dt );
+		const usingTrap = this.updateCrabTraps( inp, p );
 
 		// the traders
 		for ( const v of this.vendors ) if ( v !== this.roadhouse.vendor ) v.update( dt, p.mode === 'walk' ? p.position : null );
 		this.roadhouse.update( dt, p.mode === 'walk' ? p.position : null );
-		this.updateVendors( inp, p );
+		if ( ! usingTrap ) this.updateVendors( inp, p );
 
 		// prompts when the player has nothing to say
 		if ( ! p.prompt && can ) p.prompt = this.prompt();
@@ -294,6 +298,57 @@ export class Game {
 		} );
 		if ( this.minimap ) this.minimap.update( dt );
 		if ( this.guide ) this.guide.update( dt );
+
+	}
+
+	updateCrabTraps( inp, p ) {
+
+		if ( this.fight || this._cardDismissed || ! [ 'walk', 'swim' ].includes( p.mode ) ) return false;
+		const traps = this.crabTraps;
+		const nearby = traps.nearbyPlaced( p.position );
+		const canDrop = traps.canDrop( p.position );
+		if ( nearby && traps.carried < CRAB_TRAP_CARRY_LIMIT ) {
+
+			p.prompt = { key: 'E', text: nearby.crabs ? `Haul crab trap · ${ nearby.crabs } / 6 crabs` : 'Haul empty crab trap' };
+			if ( inp.hit( 'KeyE' ) ) {
+
+				const count = traps.haul( nearby );
+				if ( count !== null ) this.toast( count ? `Trap hauled · ${ count } crab${ count === 1 ? '' : 's' } ready for Joe` : 'Trap hauled empty' );
+
+			}
+			return true;
+
+		}
+		if ( canDrop ) {
+
+			p.prompt = { key: 'E', text: `Drop crab trap · ${ traps.carried } / ${ CRAB_TRAP_CARRY_LIMIT } carried` };
+			if ( inp.hit( 'KeyE' ) ) {
+
+				const result = traps.drop( p.position, this.app.camera.rotation.y );
+				if ( result ) {
+
+					const fillSeconds = trapFillSeconds( result.trap.x, result.trap.z );
+					this.toast( fillSeconds === 45 ? 'Crab trap dropped · rocky water: fastest catch rate' : fillSeconds === 75 ? 'Crab trap dropped · deep water: good catch rate' : 'Crab trap dropped · shallow beach water fills slowly' );
+
+				}
+
+			}
+			return true;
+
+		}
+		if ( traps.canTake( p.position ) ) {
+
+			p.prompt = { key: 'E', text: `Pick up crab trap · ${ traps.carried } / ${ CRAB_TRAP_CARRY_LIMIT } carried` };
+			if ( inp.hit( 'KeyE' ) ) {
+
+				traps.take( p.position );
+				this.toast( `Crab trap picked up · carry ${ traps.carried } / ${ CRAB_TRAP_CARRY_LIMIT }` );
+
+			}
+			return true;
+
+		}
+		return false;
 
 	}
 
@@ -407,9 +462,11 @@ export class Game {
 	sellAll() {
 
 		const r = this.state.sell();
-		if ( r.count ) this.toast( `Sold ${ r.count } fish for $${ r.total }` );
+		const crabs = this.state.sellCrabs();
+		const total = r.total + crabs.total;
+		if ( total ) this.toast( `Sold ${ r.count } fish${ crabs.count ? ` and ${ crabs.count } crab${ crabs.count === 1 ? '' : 's' }` : '' } for $${ total }` );
 		if ( this.app.audio && this.app.audio.coin ) this.app.audio.coin();
-		return r;
+		return { total, count: r.count, crabs: crabs.count };
 
 	}
 
@@ -417,6 +474,14 @@ export class Game {
 
 		const r = this.state.sell( ids );
 		if ( r.count ) this.toast( `Sold for $${ r.total }` );
+		return r;
+
+	}
+
+	sellCrabs() {
+
+		const r = this.state.sellCrabs();
+		if ( r.count ) this.toast( `Sold ${ r.count } crab${ r.count === 1 ? '' : 's' } for $${ r.total }` );
 		return r;
 
 	}

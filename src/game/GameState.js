@@ -1,5 +1,6 @@
 import { FISH, fishValue, fishLengthCm } from './FishTable.js';
 import { defaultUpgrades, gearStats, nextLevel, UPGRADES, FUEL_PRICE } from './Gear.js';
+import { CRAB_VALUE, defaultCrabTraps, normalizeCrabTraps } from './CrabTraps.js';
 
 const SAVE_KEY = 'tidewater.save.v1';
 
@@ -13,6 +14,8 @@ export class GameState {
 		this.storage = storage;
 		this.money = 0;
 		this.drinks = []; // drinks collected from Nia's counter
+		this.crabs = 0; // harvested crabs awaiting sale to Joe
+		this.crabTraps = defaultCrabTraps();
 		this.inventory = []; // { id, species, kg, cm, value, caughtAt (game hours), record }
 		this.log = {}; // species -> { count, bestKg, bestCm }
 		// the last addFish: { species, kg, cm, value, newSpecies, record, prevBestKg, prevBestCm, kept } (the catch card)
@@ -139,6 +142,27 @@ export class GameState {
 
 	}
 
+	addCrabs( count ) {
+
+		this.crabs += Math.max( 0, count | 0 );
+		this.save();
+		this.emit();
+
+	}
+
+	sellCrabs() {
+
+		const count = this.crabs;
+		const total = count * CRAB_VALUE;
+		if ( ! count ) return { count: 0, total: 0 };
+		this.crabs = 0;
+		this.money += total;
+		this.save();
+		this.emit();
+		return { count, total };
+
+	}
+
 	// buy the next level of an upgrade track; returns the new level entry or null
 	buy( key ) {
 
@@ -204,7 +228,7 @@ export class GameState {
 
 	toJSON() {
 
-		return { v: 1, money: this.money, inventory: this.inventory, log: this.log, drinks: this.drinks, upgrades: this.upgrades, fuel: this.fuel, nextId: this._nextId };
+		return { v: 1, money: this.money, inventory: this.inventory, log: this.log, drinks: this.drinks, crabs: this.crabs, crabTraps: this.crabTraps, upgrades: this.upgrades, fuel: this.fuel, nextId: this._nextId };
 
 	}
 
@@ -217,6 +241,8 @@ export class GameState {
 		for ( const f of this.inventory ) if ( ! Number.isFinite( f.cm ) ) f.cm = Math.round( fishLengthCm( f.species, f.kg ) );
 		this.log = d.log && typeof d.log === 'object' ? d.log : {};
 		this.drinks = Array.isArray( d.drinks ) ? d.drinks.filter( ( drink ) => drink && typeof drink.key === 'string' ) : [];
+		this.crabs = Math.max( 0, d.crabs | 0 );
+		this.crabTraps = normalizeCrabTraps( d.crabTraps );
 		for ( const [ k, v ] of Object.entries( this.log ) ) if ( FISH[ k ] && v && v.bestKg > 0 && ! Number.isFinite( v.bestCm ) ) v.bestCm = Math.round( fishLengthCm( k, v.bestKg ) );
 		this.upgrades = { ...defaultUpgrades(), ...( d.upgrades || {} ) };
 		this.fuel = Number.isFinite( d.fuel ) ? d.fuel : null;
@@ -257,6 +283,8 @@ export class GameState {
 		this.money = 0;
 		this.inventory = [];
 		this.log = {};
+		this.crabs = 0;
+		this.crabTraps = defaultCrabTraps();
 		this.upgrades = defaultUpgrades();
 		this.fuel = null;
 		this.save();
