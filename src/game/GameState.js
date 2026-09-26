@@ -16,6 +16,9 @@ export class GameState {
 		this.drinks = []; // drinks collected from Nia's counter
 		this.crabs = 0; // harvested crabs awaiting sale to Joe
 		this.crabTraps = defaultCrabTraps();
+		// Cooked food is deliberately kept separate from the cooler and live crab traps.
+		// It remains on the grill counter until the player sells it.
+		this.grill = { litUntil: 0, cooking: null, plated: [] };
 		this.inventory = []; // { id, species, kg, cm, value, caughtAt (game hours), record }
 		this.log = {}; // species -> { count, bestKg, bestCm }
 		// the last addFish: { species, kg, cm, value, newSpecies, record, prevBestKg, prevBestCm, kept } (the catch card)
@@ -113,6 +116,17 @@ export class GameState {
 		this.inventory = this.inventory.filter( ( f ) => f.id !== id );
 		this.save();
 		this.emit();
+
+	}
+
+	removeFish( id ) {
+
+		const fish = this.inventory.find( ( f ) => f.id === id );
+		if ( ! fish ) return null;
+		this.inventory = this.inventory.filter( ( f ) => f.id !== id );
+		this.save();
+		this.emit();
+		return fish;
 
 	}
 
@@ -239,7 +253,7 @@ export class GameState {
 
 	toJSON() {
 
-		return { v: 1, money: this.money, inventory: this.inventory, log: this.log, drinks: this.drinks, crabs: this.crabs, crabTraps: this.crabTraps, upgrades: this.upgrades, fuel: this.fuel, nextId: this._nextId };
+		return { v: 1, money: this.money, inventory: this.inventory, log: this.log, drinks: this.drinks, crabs: this.crabs, crabTraps: this.crabTraps, grill: this.grill, upgrades: this.upgrades, fuel: this.fuel, nextId: this._nextId };
 
 	}
 
@@ -254,6 +268,12 @@ export class GameState {
 		this.drinks = Array.isArray( d.drinks ) ? d.drinks.filter( ( drink ) => drink && typeof drink.key === 'string' ) : [];
 		this.crabs = Math.max( 0, d.crabs | 0 );
 		this.crabTraps = normalizeCrabTraps( d.crabTraps );
+		const grill = d.grill && typeof d.grill === 'object' ? d.grill : {};
+		this.grill = {
+			litUntil: Number.isFinite( grill.litUntil ) ? grill.litUntil : 0,
+			cooking: grill.cooking && typeof grill.cooking === 'object' ? grill.cooking : null,
+			plated: Array.isArray( grill.plated ) ? grill.plated.filter( ( item ) => item && [ 'fish', 'crab' ].includes( item.kind ) && Number.isFinite( item.value ) ).slice( 0, 6 ) : [],
+		};
 		// Crab catches now live in the physical traps until Joe buys them. Discard the old
 		// transient "basket" count left by the earlier haul implementation.
 		this.crabs = 0;
@@ -299,6 +319,7 @@ export class GameState {
 		this.log = {};
 		this.crabs = 0;
 		this.crabTraps = defaultCrabTraps();
+		this.grill = { litUntil: 0, cooking: null, plated: [] };
 		this.upgrades = defaultUpgrades();
 		this.fuel = null;
 		this.save();

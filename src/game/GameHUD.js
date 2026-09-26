@@ -274,7 +274,13 @@ export class GameHUD {
 
 		this._last.money = s.money;
 		if ( this.invOpen ) this.renderInventory();
-		if ( this.standOpen ) this.vendor && this.vendor.kind === 'shop' ? this.renderShop() : this.renderStand();
+		if ( this.standOpen ) {
+
+			if ( this.grillOpen ) this.renderGrill();
+			else if ( this.vendor && this.vendor.kind === 'shop' ) this.renderShop();
+			else this.renderStand();
+
+		}
 
 	}
 
@@ -492,9 +498,23 @@ export class GameHUD {
 
 	}
 
+	openGrill( mode = 'cook' ) {
+
+		this.grillOpen = true;
+		this.grillMode = mode;
+		this.standOpen = true;
+		this.vendor = null;
+		this.toggleInventory( false );
+		this.renderGrill();
+		this.stand.classList.add( 'is-open' );
+		releaseMouse();
+
+	}
+
 	closeStand() {
 
 		this.standOpen = false;
+		this.grillOpen = false;
 		this.stand.classList.remove( 'is-open' );
 
 	}
@@ -581,6 +601,56 @@ GameHUD.prototype.renderBar = function () {
 
 	};
 	this._setControllerFocus( '[data-drink]' );
+
+};
+
+// Beach grill menu: the catch is removed only when the player deliberately puts it
+// on the grate. A single active cook keeps the timing readable and makes burning food
+// the consequence of walking away for too long, rather than a hidden random penalty.
+GameHUD.prototype.renderGrill = function () {
+
+	const g = this.game.state.grill;
+	const pad = this.game.app.input.gamepadConnected;
+	if ( this.grillMode === 'counter' ) {
+
+		const rows = g.plated.map( ( item ) => `<div class="gm-row"><span>${ item.name } <small>grilled</small></span><span class="gm-val">$${ item.value }</span></div>` ).join( '' );
+		const total = this.game.grillPlateValue();
+		this.stand.innerHTML = `
+			<h2>Beach grill · serving counter</h2>
+			<p class="gm-sub">Grilled food earns more than Joe pays for raw catches.</p>
+			<div class="gm-list">${ rows || '<div class="gm-empty">No plated food yet.</div>' }</div>
+			<div class="gm-foot"><button class="gm-btn is-ghost" data-close>Leave (${ pad ? 'B / X' : 'E' })</button><button class="gm-btn" data-sell-plated ${ total ? '' : 'disabled' }>Sell plated food · $${ total }${ pad ? ' (A)' : '' }</button></div>`;
+		this.stand.querySelector( '[data-close]' ).onclick = () => this.closeStand();
+		const sell = this.stand.querySelector( '[data-sell-plated]' );
+		if ( sell ) sell.onclick = () => { this.game.sellPlatedFood(); this.closeStand(); };
+		this._setControllerFocus( '[data-sell-plated]' );
+		return;
+
+	}
+
+	const fishRows = this.game.state.inventory.map( ( fish ) => {
+
+		const cooked = Math.max( fish.value + 1, Math.round( fish.value * 1.35 ) );
+		return `<div class="gm-row has-cm"><span>${ FISH[ fish.species ].name }</span><span class="gm-kg">${ fish.kg.toFixed( 2 ) } kg</span><span class="gm-val">$${ cooked }</span><button class="gm-mini" data-grill-fish="${ fish.id }">Grill${ pad ? ' (A)' : '' }</button></div>`;
+
+	} ).join( '' );
+	const crabs = this.game.crabTraps.carriedCrabs;
+	const crabRow = crabs ? `<div class="gm-row"><span>Rock crab <small>from carried trap</small></span><span class="gm-val">$6</span><button class="gm-mini" data-grill-crab>Grill${ pad ? ' (A)' : '' }</button></div>` : '';
+	const remaining = Math.max( 0, Math.ceil( ( g.litUntil - Date.now() ) / 1000 ) );
+	this.stand.innerHTML = `
+		<h2>Beach grill</h2>
+		<p class="gm-sub">Coals lit · ${ remaining } seconds left. Food is ready after 18 seconds; leave it too long and it burns.</p>
+		<div class="gm-list">${ fishRows || crabRow ? `${ fishRows }${ crabRow }` : '<div class="gm-empty">Bring fish in your cooler or live crabs in a carried trap.</div>' }</div>
+		<div class="gm-foot"><span class="gm-sub">Fish sell for about 35% more; grilled crab sells for $6.</span><button class="gm-btn is-ghost" data-close>Leave (${ pad ? 'B / X' : 'E' })</button></div>`;
+	this.stand.querySelector( '[data-close]' ).onclick = () => this.closeStand();
+	for ( const b of this.stand.querySelectorAll( '[data-grill-fish]' ) ) b.onclick = () => {
+
+		if ( this.game.startCookingFish( Number( b.dataset.grillFish ) ) ) this.closeStand();
+
+	};
+	const crab = this.stand.querySelector( '[data-grill-crab]' );
+	if ( crab ) crab.onclick = () => { if ( this.game.startCookingCrab() ) this.closeStand(); };
+	this._setControllerFocus( '[data-grill-fish], [data-grill-crab]' );
 
 };
 

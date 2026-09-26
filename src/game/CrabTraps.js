@@ -392,6 +392,25 @@ export class CrabTraps {
 
 	}
 
+	// Cooking uses one *live* crab from a trap in the player's hands. Traps left in
+	// the water or on the beach are never touched by the grill.
+	takeCarriedCrab() {
+
+		const trap = this.state.crabTraps.find( ( item ) => item.state === 'carried' && item.crabs > 0 && ! item.crabsDead );
+		if ( ! trap ) return false;
+		trap.crabs --;
+		trap.crabSizes.pop();
+		if ( trap.crabs === 0 ) {
+
+			trap.landSeconds = 0;
+			trap.crabsDead = false;
+
+		}
+		this.persist();
+		return true;
+
+	}
+
 	emptyCarriedDeadTraps() {
 
 		let count = 0;

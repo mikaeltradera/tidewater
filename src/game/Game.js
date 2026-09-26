@@ -9,6 +9,7 @@ import { FishStand } from './FishStand.js';
 import { Chandlery } from './Chandlery.js';
 import { Roadhouse, DRINKS } from './Roadhouse.js';
 import { CrabTraps, CRAB_TRAP_CARRY_LIMIT, trapFillSeconds } from './CrabTraps.js';
+import { BeachGrill, COOK_READY_MS, COOK_BURN_MS, GRILL_BURN_MS } from './BeachGrill.js';
 import { CatchDisplay } from './CatchDisplay.js';
 import { UPGRADES, fuelBurn, fishingGearTier } from './Gear.js';
 import { GameHUD } from './GameHUD.js';
@@ -40,6 +41,7 @@ export class Game {
 		this.chandlery = new Chandlery( { scene: app.scene, terrain: app.terrainData, colliders: app.colliders, material: this.stand.material } );
 		this.roadhouse = new Roadhouse( { scene: app.scene, terrain: app.terrainData, colliders: app.colliders, material: this.stand.material } );
 		this.crabTraps = new CrabTraps( { scene: app.scene, terrain: app.terrainData, state: this.state } );
+		this.grill = new BeachGrill( { scene: app.scene, terrain: app.terrainData, colliders: app.colliders } );
 		this.vendors = [ this.stand.vendor, this.chandlery.vendor, this.roadhouse.vendor ];
 		// boat upgrades: engine (thrust / top speed) and deck floodlights for night fishing
 		const b = app.boatCtl;
@@ -275,12 +277,17 @@ export class Game {
 		this.updateBoat( dt );
 		this.crabTraps.update( dt, p.position );
 		this.crabTraps.updateCarryVisual( app.camera, ( p.mode === 'walk' || p.mode === 'swim' ) && ! rod.equipped );
-		const usingTrap = this.updateCrabTraps( inp, p );
+		// The grill deliberately takes precedence over "place trap" so a player can
+		// bring a live carried crab straight from the water to the coals.
+		const atGrill = p.mode === 'walk' && ( this.grill.inRange( p.position ) || this.grill.atCounter( p.position ) );
+		const usingTrap = atGrill ? false : this.updateCrabTraps( inp, p );
+		const usingGrill = ! usingTrap && this.updateGrill( inp, p );
+		this.grill.update( this.state.grill );
 
 		// the traders
 		for ( const v of this.vendors ) if ( v !== this.roadhouse.vendor ) v.update( dt, p.mode === 'walk' ? p.position : null );
 		this.roadhouse.update( dt, p.mode === 'walk' ? p.position : null );
-		if ( ! usingTrap ) this.updateVendors( inp, p );
+		if ( ! usingTrap && ! usingGrill ) this.updateVendors( inp, p );
 
 		// prompts when the player has nothing to say
 		if ( ! p.prompt && can ) p.prompt = this.prompt();
@@ -299,6 +306,140 @@ export class Game {
 		} );
 		if ( this.minimap ) this.minimap.update( dt );
 		if ( this.guide ) this.guide.update( dt );
+
+	}
+
+	updateGrill( inp, p ) {
+
+		const grill = this.state.grill, now = Date.now();
+		if ( grill.cooking && now >= grill.cooking.burnAt ) {
+
+			grill.cooking = null;
+			this.saveGrill();
+			this.toast( 'The food burned · watch the grill closely next time', 3500 );
+
+		}
+		if ( p.mode !== 'walk' || this.fight || this._cardDismissed ) return false;
+		const hud = this.hud;
+		if ( hud && hud.grillOpen && ! this.grill.inRange( p.position ) && ! this.grill.atCounter( p.position ) ) hud.closeStand();
+		if ( this.grill.atCounter( p.position ) && grill.plated.length ) {
+
+			if ( ! p.prompt ) p.prompt = { key: 'E', text: hud && hud.grillOpen ? 'Leave counter' : `Sell plated food · $${ this.grillPlateValue() }` };
+			if ( inp.hit( 'KeyE' ) ) {
+
+				if ( hud && hud.grillOpen ) hud.closeStand();
+				else if ( hud ) hud.openGrill( 'counter' );
+				else this.sellPlatedFood();
+
+			}
+			return true;
+
+		}
+		if ( ! this.grill.inRange( p.position ) ) return false;
+		if ( grill.litUntil <= now ) {
+
+			if ( ! p.prompt ) p.prompt = { key: 'E', text: 'Light beach grill' };
+			if ( inp.hit( 'KeyE' ) ) {
+
+				grill.litUntil = now + GRILL_BURN_MS;
+				this.saveGrill();
+				this.toast( 'Grill lit · it will burn for 3 minutes' );
+
+			}
+			return true;
+
+		}
+		if ( grill.cooking ) {
+
+			const ready = now >= grill.cooking.readyAt;
+			const seconds = Math.max( 0, Math.ceil( ( ( ready ? grill.cooking.burnAt : grill.cooking.readyAt ) - now ) / 1000 ) );
+			if ( ! p.prompt ) p.prompt = { key: 'E', text: ready ? `Plate grilled ${ grill.cooking.name } · ${ seconds }s before burn` : `Cooking ${ grill.cooking.name } · ${ seconds }s` };
+			if ( ready && inp.hit( 'KeyE' ) ) this.plateCooking();
+			return true;
+
+		}
+		if ( ! p.prompt ) p.prompt = { key: 'E', text: hud && hud.grillOpen ? 'Leave grill' : 'Grill a catch' };
+		if ( inp.hit( 'KeyE' ) ) {
+
+			if ( hud && hud.grillOpen ) hud.closeStand();
+			else if ( hud ) hud.openGrill( 'cook' );
+
+		}
+		return true;
+
+	}
+
+	saveGrill() {
+
+		this.state.save();
+		this.state.emit();
+
+	}
+
+	startCookingFish( id ) {
+
+		const grill = this.state.grill;
+		const now = Date.now();
+		if ( grill.litUntil < now + COOK_READY_MS || grill.cooking || grill.plated.length >= 6 ) {
+
+			if ( grill.litUntil > now && grill.litUntil < now + COOK_READY_MS ) this.toast( 'The coals are too low to finish a new dish · light the grill again' );
+			return false;
+
+		}
+		const fish = this.state.removeFish( id );
+		if ( ! fish ) return false;
+		grill.cooking = { kind: 'fish', name: FISH[ fish.species ].name, value: Math.max( fish.value + 1, Math.round( fish.value * 1.35 ) ), readyAt: now + COOK_READY_MS, burnAt: now + COOK_BURN_MS };
+		this.saveGrill();
+		this.toast( `${ grill.cooking.name } on the grill · return in 18 seconds` );
+		return true;
+
+	}
+
+	startCookingCrab() {
+
+		const grill = this.state.grill;
+		const now = Date.now();
+		if ( grill.litUntil < now + COOK_READY_MS || grill.cooking || grill.plated.length >= 6 ) {
+
+			if ( grill.litUntil > now && grill.litUntil < now + COOK_READY_MS ) this.toast( 'The coals are too low to finish a new dish · light the grill again' );
+			return false;
+
+		}
+		if ( ! this.crabTraps.takeCarriedCrab() ) return false;
+		grill.cooking = { kind: 'crab', name: 'Rock crab', value: 6, readyAt: now + COOK_READY_MS, burnAt: now + COOK_BURN_MS };
+		this.saveGrill();
+		this.toast( 'Rock crab on the grill · return in 18 seconds' );
+		return true;
+
+	}
+
+	plateCooking() {
+
+		const cooking = this.state.grill.cooking;
+		if ( ! cooking || Date.now() < cooking.readyAt ) return false;
+		this.state.grill.plated.push( { kind: cooking.kind, name: cooking.name, value: cooking.value } );
+		this.state.grill.cooking = null;
+		this.saveGrill();
+		this.toast( `${ cooking.name } plated · take it to the counter` );
+		return true;
+
+	}
+
+	grillPlateValue() {
+
+		return this.state.grill.plated.reduce( ( total, item ) => total + item.value, 0 );
+
+	}
+
+	sellPlatedFood() {
+
+		const count = this.state.grill.plated.length, total = this.grillPlateValue();
+		if ( ! count ) return { count: 0, total: 0 };
+		this.state.grill.plated = [];
+		this.state.credit( total );
+		this.toast( `Sold ${ count } grilled dish${ count === 1 ? '' : 'es' } for $${ total }` );
+		if ( this.app.audio && this.app.audio.coin ) this.app.audio.coin();
+		return { count, total };
 
 	}
 
