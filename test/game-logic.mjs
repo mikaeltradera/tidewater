@@ -4,6 +4,7 @@ import { habitatAt, pickSpecies, rollWeight, biteDelay } from '../src/game/Bites
 import { CatchMinigame } from '../src/game/CatchMinigame.js';
 import { GameState } from '../src/game/GameState.js';
 import { gearStats, defaultUpgrades, UPGRADES, FISHING_TIERS, fishingGearTier } from '../src/game/Gear.js';
+import { CRAB_TRAP_CAPACITY, defaultCrabTraps, normalizeCrabTraps, trapFillSeconds } from '../src/game/CrabTraps.js';
 
 let fails = 0;
 const ok = ( c, msg ) => {
@@ -121,6 +122,9 @@ const mem = new Map();
 const storage = { getItem: ( k ) => mem.get( k ) ?? null, setItem: ( k, v ) => mem.set( k, v ) };
 const s = new GameState( storage );
 ok( s.stats.holdKg === 30, 'cooler holds 30 kg' );
+ok( defaultCrabTraps().length === 8 && defaultCrabTraps().every( ( trap ) => trap.state === 'stored' && trap.crabs === 0 ) && defaultCrabTraps().filter( ( trap ) => trap.cache === 'pier' ).length === 4, 'a new save starts with two stacks of four empty crab traps' );
+ok( trapFillSeconds( - 155, - 20 ) < trapFillSeconds( 50, 50 ) && trapFillSeconds( 50, 50 ) < trapFillSeconds( 50, - 20 ), 'rocky water fills traps fastest, deeper water next, beach shallows slowest' );
+ok( normalizeCrabTraps( [ { id: 1, state: 'placed', crabs: 99 } ] )[ 0 ].crabs === CRAB_TRAP_CAPACITY, 'saved traps never exceed six crabs' );
 const a = s.addFish( 'grunt', 0.84, 9.5 );
 const b = s.addFish( 'yellowtail', 1.31, 10 );
 ok( a && b && s.inventory.length === 2, 'fish go into the cooler' );
@@ -128,6 +132,9 @@ ok( s.addFish( 'tarpon', 40, 22 ) === null && s.log.tarpon.count === 1, 'a fish 
 const value = s.holdValue;
 const sale = s.sell( [ a.id ] );
 ok( sale.count === 1 && s.money === a.value && s.inventory.length === 1, 'selling one fish pays for it' );
+s.addCrabs( 3 );
+const crabSale = s.sellCrabs();
+ok( crabSale.count === 3 && crabSale.total === 42 && s.crabs === 0, 'harvested crabs can be sold to Joe' );
 s.upgrades.hold = 1;
 const s2 = new GameState( storage );
 s.save();

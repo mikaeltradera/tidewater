@@ -61,6 +61,7 @@ export class BoatController {
 		// The jet ski shares this proven water controller with the fishing boat, but has a
 		// much lighter hull, planing hull resistance and a more agile hull response.
 		this.isJetSki = model.group.name === 'JetSki';
+		const dock = this.isJetSki ? WORLD.jetSkiDock : WORLD.boatDock;
 		this.dockCollision = colliders ? new VehicleDockCollision( model, colliders ) : null;
 		this.previousPosition = new THREE.Vector3();
 
@@ -96,8 +97,8 @@ export class BoatController {
 		this.rudderLift = this.isJetSki ? 4.6 : 2.8; // rudder lift slope (x area 0.12 m^2), includes the hull's flap effect
 
 		// state (position = model origin at the design waterline)
-		this.position = new THREE.Vector3().copy( WORLD.boatDock.position );
-		this.quaternion = new THREE.Quaternion().setFromAxisAngle( new THREE.Vector3( 0, 1, 0 ), WORLD.boatDock.heading );
+		this.position = new THREE.Vector3().copy( dock.position );
+		this.quaternion = new THREE.Quaternion().setFromAxisAngle( new THREE.Vector3( 0, 1, 0 ), dock.heading );
 		this.velocity = new THREE.Vector3();
 		this.angular = new THREE.Vector3();
 
@@ -109,7 +110,7 @@ export class BoatController {
 		this.reverseFactor = this.isJetSki ? 0.32 : 0.45; // astern thrust relative to ahead
 		this.driven = false;
 		this.moored = true;
-		this.mooring = { anchor: WORLD.boatDock.position.clone(), heading: WORLD.boatDock.heading };
+		this.mooring = { anchor: dock.position.clone(), heading: dock.heading };
 
 		const n = this.samples.length;
 		this.waterH = new Float32Array( n ); // latest read-back
@@ -489,16 +490,17 @@ export class BoatController {
 	// back to the berth, at rest (safety net if the integration ever blows up)
 	reset() {
 
-		this.position.copy( WORLD.boatDock.position );
-		this.quaternion.setFromAxisAngle( new THREE.Vector3( 0, 1, 0 ), WORLD.boatDock.heading );
+		const dock = this.isJetSki ? WORLD.jetSkiDock : WORLD.boatDock;
+		this.position.copy( dock.position );
+		this.quaternion.setFromAxisAngle( new THREE.Vector3( 0, 1, 0 ), dock.heading );
 		this.velocity.set( 0, 0, 0 );
 		this.angular.set( 0, 0, 0 );
 		this.throttle = 0;
 		this.steer = 0;
 		this.rpm = 0;
 		this.moored = true;
-		this.mooring.anchor.copy( WORLD.boatDock.position );
-		this.mooring.heading = WORLD.boatDock.heading;
+		this.mooring.anchor.copy( dock.position );
+		this.mooring.heading = dock.heading;
 
 	}
 

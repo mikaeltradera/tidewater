@@ -85,6 +85,12 @@ const CARDS = [
 		</div>`,
 	},
 	{
+		eyebrow: 'Crab traps',
+		title: 'Set, soak, haul',
+		body: `<p>Pick up crab traps from either stack: on the beach in front of the original traps, or at the pier end by the boat. You can carry <b>two at once</b>, then drop them onto the seabed with <kbd>E</kbd>.</p>
+			<p>Each trap holds up to <b>six crabs</b>. Rocky water fills fastest; deeper water beyond the pier is also productive, while shallow beach water is slower. Haul a trap with <kbd>E</kbd>, then sell the crabs to Joe.</p>`,
+	},
+	{
 		eyebrow: 'Getting around',
 		title: 'Joe and Marta',
 		body: `<div class="gm-guide-list">
@@ -113,6 +119,12 @@ const CONTROLLER_CARDS = [
 			${ row( k( 'LT' ), 'Reel an empty line back in' ) }
 			${ row( k( 'D-pad ↓' ), 'Your cooler and fish log' ) }
 		</div>`,
+	},
+	{
+		eyebrow: 'Crab traps · Xbox controller',
+		title: 'Set, soak, haul',
+		body: `<p>Pick up crab traps from either stack: on the beach in front of the original traps, or at the pier end by the boat. Carry up to <b>two</b>, then press <kbd>X</kbd> over submerged seabed to drop one.</p>
+			<p>Rocky water fills traps fastest; deeper water beyond the pier is also productive. Press <kbd>X</kbd> beside a trap to haul up to six crabs, then sell them to Joe.</p>`,
 	},
 	{
 		eyebrow: 'Getting around · Xbox controller',
