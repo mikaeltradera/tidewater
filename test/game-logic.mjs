@@ -69,6 +69,8 @@ for ( const id of FISH_IDS ) {
 
 }
 ok( fishValue( 'redSnapper', 5 ) > fishValue( 'redSnapper', 2 ), 'bigger fish is worth more' );
+ok( fishValue( 'mullet', 1 ) >= 12, 'starter catches provide enough money to begin upgrading' );
+ok( fishValue( 'redSnapper', 5 ) > fishValue( 'mullet', 2 ) * 4, 'premium offshore catches fund later gear levels faster' );
 {
 	const starter = defaultUpgrades();
 	const offshore = { ...starter, rod: 4, reel: 4 };
