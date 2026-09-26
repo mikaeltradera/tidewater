@@ -404,15 +404,35 @@ export class BoatController {
 		// the keel's lift resists roll in proportion to speed (a boat underway rolls much less)
 		const pitchDamping = this.isJetSki ? 480 : 25000;
 		const yawDamping = this.isJetSki ? 350 : 2000;
-		const rollDamping = this.isJetSki ? 280 + 90 * au : 4500 + 900 * au;
+		// Roll damping: boat has heavy keel + wide beam, much more damping than jet ski
+		const rollDamping = this.isJetSki ? 500 + 30 * au : 8000 + 1800 * au;
 		_v.set( - aLoc.x * pitchDamping, - aLoc.y * yawDamping, - aLoc.z * rollDamping ).multiplyScalar( wd ).applyQuaternion( this.quaternion );
 		T.add( _v );
-		// Let waves pitch and roll the jet ski, but continuously bias its hull back toward upright.
-		// A stronger safety recovery below takes over only if it is close to rolling over.
-		if ( this.isJetSki ) {
+		// Upright restoring torque (metacentric stability): GM * displacement * sin(heel)
+		// Fishing boat: GM ~0.6 m, displacement ~3200 kg → righting moment ~18,800 Nm/rad at small angles
+		if ( ! this.isJetSki ) {
 
+			_v.crossVectors( up, _worldUp ); // axis and magnitude ~sin(heel angle)
+			const heel = _v.length(); // 0..1
+			if ( heel > 0.01 ) {
+				// Stiffness from metacentric height: GM * mass * g * wetD
+				const GM = this.hydro?.metacentricRadius ? this.hydro.metacentricRadius - Math.abs( this.com.y - ( this.hydro?.centerOfBuoyancy?.y ?? 0 ) ) : 0.6;
+				const stiffness = Math.max( 0.3, GM ) * this.mass * GRAV * wetD; // Nm/rad
+				_v.normalize().multiplyScalar( stiffness * Math.asin( Math.min( 1, heel ) ) );
+				T.add( _v );
+			}
+
+		} else {
+
+			// Jet ski: continuous upright restoring torque (proportional to heel angle).
+			// Wide sponsons generate strong righting moment when heeled — like a catamaran.
 			_v.crossVectors( up, _worldUp );
-			T.addScaledVector( _v, 900 * ( 0.45 + wetD ) );
+			const heel = _v.length();
+			if ( heel > 0.02 ) {
+				const stiffness = 5000 * ( 0.5 + 0.5 * Math.min( 1, au / 12 ) ) * wetD;
+				_v.normalize().multiplyScalar( stiffness * Math.asin( Math.min( 1, heel ) ) );
+				T.add( _v );
+			}
 
 		}
 
@@ -454,24 +474,32 @@ export class BoatController {
 
 		}
 
-		if ( this.isJetSki ) {
+		// Emergency upright recovery (both vessels)
+		const hullUp = _up.set( 0, 1, 0 ).applyQuaternion( this.quaternion );
+		const maxHeel = this.isJetSki ? 0.3 : 0.15; // jet ski: ~72°, boat: ~8°
+		if ( hullUp.y < maxHeel ) {
 
-			const hullUp = _up.set( 0, 1, 0 ).applyQuaternion( this.quaternion );
-			if ( hullUp.y < 0.3 ) {
+			const forward = this.forward( _fwd ).setY( 0 );
+			if ( forward.lengthSq() > 1e-6 ) {
 
-				const forward = this.forward( _fwd ).setY( 0 );
-				if ( forward.lengthSq() > 1e-6 ) {
-
-					forward.normalize();
-					_uprightQ.setFromAxisAngle( _worldUp, Math.atan2( forward.x, forward.z ) );
-					this.quaternion.slerp( _uprightQ, Math.min( 0.28, h * ( 0.3 - hullUp.y ) * 12 ) );
-					this.angular.x *= 0.35;
-					this.angular.z *= 0.35;
-
-				}
+				forward.normalize();
+				_uprightQ.setFromAxisAngle( _worldUp, Math.atan2( forward.x, forward.z ) );
+				const t = Math.min( this.isJetSki ? 0.28 : 0.4, h * ( maxHeel - hullUp.y ) * ( this.isJetSki ? 12 : 25 ) );
+				this.quaternion.slerp( _uprightQ, t );
+				this.angular.x *= this.isJetSki ? 0.35 : 0.2;
+				this.angular.z *= this.isJetSki ? 0.35 : 0.2;
 
 			}
 
+		}
+
+		// Emergency anti-sink: if COM is more than 1.5m below water, add strong buoyancy
+		if ( this.hasWater ) {
+			const avgWaterH = this.hEff.reduce( ( a, b ) => a + b, 0 ) / this.hEff.length;
+			if ( comW.y < avgWaterH - 1.5 ) {
+				_f.set( 0, this.mass * GRAV * 3, 0 ); // 3x weight in buoyancy
+				F.add( _f );
+			}
 		}
 
 		// origin = com - R * comLocal
@@ -594,33 +622,9 @@ export class BoatController {
 
 		}
 
-		// The newer hull sweep resolves fixed dock contacts after integration. Keep this
-		// legacy force response only as a fallback; running both made the small jet ski
-		// fight an oversized boat outline and stick to pier geometry.
-		if ( this.colliders && ! this.dockCollision ) {
-
-			const outline = this.outline || ( this.outline = [
-				new THREE.Vector3( 0, 0.3, 4.1 ), new THREE.Vector3( 1.2, 0.3, 2.0 ), new THREE.Vector3( - 1.2, 0.3, 2.0 ),
-				new THREE.Vector3( 1.4, 0.3, - 1.0 ), new THREE.Vector3( - 1.4, 0.3, - 1.0 ), new THREE.Vector3( 1.2, 0.3, - 3.8 ), new THREE.Vector3( - 1.2, 0.3, - 3.8 ),
-			] );
-			const tmp = _c5;
-			for ( const lp of outline ) {
-
-				this.toWorld( lp, pw );
-				tmp.copy( pw );
-				tmp.y -= 0.9;
-				if ( this.colliders.resolveCapsule( tmp, 0.25, 1.6, 0 ) ) {
-
-					vp.copy( this.angular ).cross( r.copy( pw ).sub( comW ) ).add( this.velocity );
-					f.set( ( tmp.x - pw.x ) * 260000 - vp.x * 8000, 0, ( tmp.z - pw.z ) * 260000 - vp.z * 8000 );
-					F.add( f );
-					T.add( r.copy( pw ).sub( comW ).cross( f ) );
-
-				}
-
-			}
-
-		}
+		// The newer hull sweep (VehicleDockCollision) resolves fixed dock contacts after integration.
+		// This legacy force response is disabled — it fought the hull sweep and caused instability.
+		// if ( this.colliders && ! this.dockCollision ) { ... }
 
 	}
 

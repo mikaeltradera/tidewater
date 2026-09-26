@@ -10,7 +10,8 @@ export class VehicleDockCollision {
 	constructor( model, colliders ) {
 
 		this.colliders = colliders;
-		const jetSki = model.group.name === 'JetSki';
+		this.isJetSki = model.group.name === 'JetSki';
+		const jetSki = this.isJetSki;
 		this.radius = jetSki ? 0.12 : 0.24;
 		this.probeDrop = jetSki ? 0.5 : 0.9;
 		this.probes = jetSki ? [
@@ -37,7 +38,9 @@ export class VehicleDockCollision {
 		const target = this.target.copy( vehicle.position );
 		const travel = previousPosition.distanceTo( target );
 		if ( ! Number.isFinite( travel ) ) return;
-		const candidates = this.colliders.nearbySolids( previousPosition, target, 7 );
+		let candidates = this.colliders.nearbySolids( previousPosition, target, 7 );
+		// Exclude the vehicle's own collision boxes (tagged 'boat_*' or 'jetski_*')
+		candidates.boxes = candidates.boxes.filter( b => ! /^(boat_|jetski_)/.test( b.tag ) );
 		if ( candidates.boxes.length === 0 && candidates.cylinders.length === 0 ) return;
 
 		const steps = Math.min( 128, Math.max( 1, Math.ceil( travel / MAX_TRAVEL ) ) );
@@ -81,6 +84,8 @@ export class VehicleDockCollision {
 				}
 				if ( hits === 0 || this.push.lengthSq() < 1e-10 ) break;
 				this.push.divideScalar( hits );
+				// Limit push for the fishing boat to prevent capsizing from sudden stern contact during turns
+				if ( ! this.isJetSki && this.push.length() > 0.15 ) this.push.setLength( 0.15 );
 				vehicle.position.add( this.push );
 				this.offset.add( this.push );
 				this.normal.copy( this.push ).setY( 0 ).normalize();
@@ -88,8 +93,8 @@ export class VehicleDockCollision {
 				if ( inward < 0 ) vehicle.velocity.addScaledVector( this.normal, - inward );
 				// Glancing impacts keep their sideways component and yaw naturally, while
 				// repeated contact is gently damped to prevent jitter against a piling.
-				vehicle.velocity.multiplyScalar( 0.985 );
-				vehicle.angular.y *= 0.88;
+				vehicle.velocity.multiplyScalar( this.isJetSki ? 0.985 : 0.995 );
+				vehicle.angular.y *= this.isJetSki ? 0.88 : 0.95;
 				this.stats.contacts ++;
 
 			}
