@@ -1,4 +1,4 @@
-import { Vector3, Euler, Color, MathUtils, Mesh } from './engine/index.js';
+import { Vector3, Euler, Color, MathUtils, Mesh, Quaternion } from './engine/index.js';
 import { GPU } from './engine/gpu/GPU.js';
 import { SunShadows } from './engine/render/Shadows.js';
 import { FrameUniforms } from './engine/render/Frame.js';
@@ -172,6 +172,14 @@ export class App {
 		scene.add( this.boat.group );
 		this.boat.group.position.copy( WORLD.boatDock.position );
 		this.boat.group.rotation.y = WORLD.boatDock.heading;
+		// Add boat collision boxes to world colliders (transformed to world space each frame)
+		this.boatColliders = [];
+		for ( const bc of this.boat.colliders ) {
+			if ( bc.solid || bc.walkable ) {
+				const box = this.colliders.addBox( bc.center.clone(), bc.half.clone(), 0, { walkable: bc.walkable, solid: bc.solid, tag: 'boat_' + bc.tag } );
+				this.boatColliders.push( { box, localCenter: bc.center.clone(), localHalf: bc.half.clone(), walkable: bc.walkable, solid: bc.solid } );
+			}
+		}
 		this.jetSki = new JetSkiModel();
 		scene.add( this.jetSki.group );
 		this.jetSki.group.position.copy( WORLD.jetSkiDock.position );
@@ -748,6 +756,21 @@ fn terrainWetness( xz: vec2f, h: f32 ) -> vec2f {
 		if ( this.whale ) this.whale.update( dt, this.camera );
 		if ( this.shark ) this.shark.update( dt, this.camera );
 		this.boat.update( dt );
+		// Update boat collision boxes to follow the boat in world space
+		if ( this.boatColliders && this.boatColliders.length ) {
+			this.boat.group.updateWorldMatrix( true, false );
+			const m = this.boat.group.matrixWorld;
+			const q = new Quaternion().setFromRotationMatrix( m );
+			const rotY = Math.atan2( 2 * ( q.w * q.y + q.x * q.z ), 1 - 2 * ( q.y * q.y + q.z * q.z ) );
+			for ( const bc of this.boatColliders ) {
+				const worldCenter = bc.localCenter.clone().applyMatrix4( m );
+				bc.box.center.copy( worldCenter );
+				bc.box.rotY = rotY;
+				bc.box.cos = Math.cos( rotY );
+				bc.box.sin = Math.sin( rotY );
+				bc.box.shape = null;
+			}
+		}
 		this.wildlife.update( dt, this.camera, this.freeCam ? null : this.player );
 		this.localLights.update( this.camera, dt );
 
